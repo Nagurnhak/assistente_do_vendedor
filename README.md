@@ -16,10 +16,15 @@ Cada venda exigia vários passos manuais entre três sistemas: conferir o pedido
 de cada item (inclusive das peças de produtos montados, como mesa = tampo + base), emitir uma ordem de
 compra por fornecedor, abrir cards para a fábrica e a logística com prints e prazos, e atualizar o status
 do pedido. Era lento e fácil de errar.
+## O Resultado
+
+Em 1 semana de testes, o tempo gasto em compras reduziu 80%, com a integração total também com a tray, uma compra que demorava cerca de 5 minutos por pedido, irá demorar 30 segundos, aumentando a eficiência em 200% em média.
 
 ## O que o assistente faz
 
 | Ferramenta | O que resolve |
+<img width="1471" height="870" alt="image" src="https://github.com/user-attachments/assets/4b84c360-9565-4ff7-9b4e-e4a61a283b11" />
+
 |---|---|
 | **Compras** | Lê o pedido no Bling pelo número da Tray, desmembra produtos estruturados em componentes, agrupa uma OC por fornecedor, manda personalizações para a OC da fábrica, cria os cards no Trello (com prints) e atualiza o status no Bling e na Tray. |
 | **Calculadora de descontos** | Valores em 12x, 3x e à vista no Pix, aceitando o formato brasileiro (`1.500,50`). |
@@ -83,7 +88,7 @@ por um painel que mostra uma pergunta por vez, com botões para as escolhas.
 
 ## Próximos passos
 
-- Validar a integração com a Tray na loja de teste (código pronto, aguardando homologação).
+- Validar a integração com a Tray na loja de teste (código pronto, validado no ambiente de testes, aguardando liberação na loja real).
 - Quadro de acompanhamento de vendas por vendedor, com alertas de prazo.
 
 ## Tecnologias
