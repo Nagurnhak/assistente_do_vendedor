@@ -18,7 +18,8 @@ compra por fornecedor, abrir cards para a fábrica e a logística com prints e p
 do pedido. Era lento e fácil de errar.
 ## O Resultado
 
-Em 1 semana de testes, o tempo gasto em compras reduziu 80%, com a integração total também com a tray, uma compra que demorava cerca de 5 minutos por pedido, irá demorar 30 segundos, aumentando a eficiência em 200% em média.
+- **Medido:** em 1 semana de uso pelos vendedores, o tempo gasto com compras caiu **80%**.
+- **Esperado com a integração da Tray:** cada pedido deve passar de cerca de **5 minutos para 30 segundos** (10 vezes mais rápido).
 
 ## O que o assistente faz
 
@@ -91,7 +92,7 @@ por um painel que mostra uma pergunta por vez, com botões para as escolhas.
 
 ## Próximos passos
 
-- Validar a integração com a Tray na loja de teste (código pronto, validado no ambiente de testes, aguardando liberação na loja real).
+- Liberar a integração com a Tray na loja real (já validada no ambiente de testes).
 - Quadro de acompanhamento de vendas por vendedor, com alertas de prazo.
 
 ## Tecnologias
