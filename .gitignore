@@ -1,0 +1,16 @@
+# Credenciais e tokens: NUNCA vão para o GitHub
+config.json
+*tokens*.json
+*.tmp
+.env
+
+# Python / PyInstaller
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+*.exe
+
+# Versões antigas e rascunhos locais
+antigos/
