@@ -6,7 +6,7 @@ do pedido que chega pela **Tray** às ordens de compra no **Bling** e aos cards 
 > **Projeto de portfólio.** Todos os dados deste repositório são fictícios. A versão de demonstração
 > não acessa nenhuma plataforma: Bling, Trello e Tray são simulados dentro do programa.
 
-📄 **Explicação visual dos processos:** [`docs/index.html`](docs/index.html)
+📄 **Explicação visual dos processos:** [abrir a página](https://nagurnhak.github.io/assistente_do_vendedor/)
 
 ---
 
