@@ -1,0 +1,32 @@
+{
+  "trello": {
+    "key": "SUA_TRELLO_KEY",
+    "token": "SEU_TRELLO_TOKEN",
+    "lista_logistica_id": "ID_DA_LISTA_LOGISTICA",
+    "listas_fabrica": [
+      {"nome": "Responsável: Etapa", "id": "ID_DA_LISTA"}
+    ]
+  },
+  "bling": {
+    "client_id": "SEU_CLIENT_ID",
+    "client_secret": "SEU_CLIENT_SECRET"
+  },
+  "tray": {
+    "consumer_key": "SUA_CONSUMER_KEY",
+    "consumer_secret": "SEU_CONSUMER_SECRET",
+    "code": "SEU_CODE",
+    "api_address": "URL_DA_API_DA_LOJA (ex.: https://www.sualoja.com.br/web_api)",
+    "campo_observacao": "store_note",
+    "status_oc_enviada": "Mercadoria Solicitada ao depósito central",
+    "status_separacao": "Pedido em separação"
+  },
+  "fabrica": {
+    "nome": "Nome da fábrica no Bling",
+    "identificador": "trecho do nome que identifica a fábrica nos fornecedores",
+    "contato_id": null
+  },
+  "loja": {
+    "sufixo_nos_produtos": "nome da loja que aparece no fim dos produtos (opcional)"
+  },
+  "prazo_transporte_dias_uteis": 5
+}
