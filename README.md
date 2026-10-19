@@ -22,10 +22,10 @@ Em 1 semana de testes, o tempo gasto em compras reduziu 80%, com a integração 
 
 ## O que o assistente faz
 
-| Ferramenta | O que resolve |
+
 <img width="1471" height="870" alt="image" src="https://github.com/user-attachments/assets/4b84c360-9565-4ff7-9b4e-e4a61a283b11" />
 
-|---|---|
+| Ferramenta | O que resolve |
 | **Compras** | Lê o pedido no Bling pelo número da Tray, desmembra produtos estruturados em componentes, agrupa uma OC por fornecedor, manda personalizações para a OC da fábrica, cria os cards no Trello (com prints) e atualiza o status no Bling e na Tray. |
 | **Calculadora de descontos** | Valores em 12x, 3x e à vista no Pix, aceitando o formato brasileiro (`1.500,50`). |
 | **Descrição em HTML** | Monta a observação padrão do pedido com os itens puxados do Bling e calcula as datas de embarque e entrega em dias úteis. |
