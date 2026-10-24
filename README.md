@@ -23,7 +23,7 @@ pedido e, depois, cobrar fornecedores e logística para nada atrasar. Era lento 
 ## O resultado
 
 - **Medido:** em 1 semana de uso pelos vendedores, o tempo gasto com compras caiu **80%**.
-- **Esperado com a integração da Tray:** cada pedido deve passar de cerca de **5 minutos para 30 segundos** (10 vezes mais rápido).
+- **Com a ntegração da Tray:** cada pedido passou e **5 minutos para 30 segundos** (10 vezes mais rápido) conforme o projetado.
 
 ## O que o assistente faz
 
