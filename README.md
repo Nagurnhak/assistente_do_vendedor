@@ -69,7 +69,7 @@ checklist de cada card em [`docs/exemplos/cards.md`](docs/exemplos/cards.md)):
 
 ## Como testar (sem conta em nenhuma plataforma)
 
-**Executável:** baixe o `Assistente do Vendedor - DEMO.exe` na aba *Releases* e abra.
+**Executável:** baixe o `Assistente_do_Vendedor_DEMO.exe` na aba *Releases* e abra.
 
 **Pelo código:**
 
