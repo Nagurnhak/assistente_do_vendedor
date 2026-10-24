@@ -169,16 +169,20 @@
     <ol class="fluxo">
       <li><span class="sistema">Tray → Bling</span><h3>Encontra o pedido</h3>
         <p>Busca o pedido de venda no Bling pelo número da Tray e confere se é mesmo o mesmo número (o filtro da API pode falhar).</p></li>
+      <li><span class="sistema">Tray + tabelas</span><h3>Calcula os prazos</h3>
+        <p>Lê o endereço do cliente, consulta a tabela de frete da transportadora e calcula a data máxima de embarque e a data em que os fornecedores precisam entregar.</p></li>
       <li><span class="sistema">Bling</span><h3>Desmembra os produtos</h3>
         <p>Mesa = tampo + base: produtos estruturados viram componentes, cada um com fornecedor e custo do cadastro.</p></li>
       <li><span class="sistema">Vendedor</span><h3>Personalização</h3>
         <p>Para cada peça, pergunta se há personalização e o valor; personalizações vão sempre para a OC da fábrica.</p></li>
       <li><span class="sistema">Bling</span><h3>Ordens de compra</h3>
-        <p>Agrupa uma OC por fornecedor, permite revisar quantidade e valor e cria a OC com observações só dos itens dela.</p></li>
-      <li><span class="sistema">Trello</span><h3>Cards com prints</h3>
-        <p>Card da logística (transportadora puxada do pedido, prazo com folga) e um card por OC da fábrica, com o print anexado.</p></li>
+        <p>Agrupa uma OC por fornecedor, já com a data que o fornecedor precisa cumprir, e cria a OC com observações só dos itens dela; depois confere fornecedor e número.</p></li>
+      <li><span class="sistema">Trello</span><h3>Cards com fichas</h3>
+        <p>Card da logística na data máxima de embarque, com a ficha do pedido (fotos, OCs, prazos) e uma checklist de separação; um card por OC da fábrica, com a ficha da OC.</p></li>
       <li><span class="sistema">Bling + Tray</span><h3>Status</h3>
-        <p>Com OC: “OC enviada” no Bling e “Mercadoria solicitada” na Tray. Tudo em estoque: “Em separação” nos dois.</p></li>
+        <p>Com OC: “OC enviada” no Bling e “Aguardando fornecedor” na Tray. Tudo em estoque: “Em separação” nos dois. As OCs ficam anotadas nas observações do pedido.</p></li>
+      <li><span class="sistema">WhatsApp</span><h3>Acompanhamento</h3>
+        <p>De hora em hora confere as OCs, atualiza as checklists e monta os lembretes do dia para fornecedores e logística.</p></li>
     </ol>
   </div>
 </section>
@@ -187,17 +191,18 @@
   <div class="container">
     <span class="rotulo">Exemplo</span>
     <h2>Pedido 1002: uma mesa estruturada e quatro cadeiras</h2>
-    <p class="suave">Resultado real do teste automático com os dados fictícios da demonstração (a base recebeu pintura personalizada).</p>
+    <p class="suave">Resultado real da demonstração com dados fictícios: cliente em Campinas/SP, 4 dias úteis de frete pela tabela, e o tampo com pintura personalizada.</p>
     <div class="cartao rolagem" style="margin-top:16px">
       <table class="tabela">
         <thead><tr><th>Criado</th><th>Para</th><th>Conteúdo</th></tr></thead>
         <tbody>
-          <tr><td><span class="tag">OC 5001</span></td><td>Metalúrgica Aurora</td><td class="mono">Pedido Tray: 1002 | 1x Base Aurora Aço Preto</td></tr>
-          <tr><td><span class="tag">OC 5002</span></td><td>Estofados Horizonte</td><td class="mono">Pedido Tray: 1002 | 4x Cadeira Lina Cor:Grafite</td></tr>
-          <tr><td><span class="tag">OC 5003</span></td><td>Fábrica própria</td><td class="mono">Pedido Tray: 1002 | 1x Tampo Aurora 1,60m | PERSONALIZAÇÃO: 1x Base Aurora Aço Preto: pintura preta</td></tr>
-          <tr><td><span class="tag">Card</span></td><td>Trello · Logística</td><td class="mono">Pedido 1002 - 1x Mesa de Jantar Aurora 1,60m, 4x Cadeira Lina Cor:Grafite - Rápida Standard</td></tr>
-          <tr><td><span class="tag">Card</span></td><td>Trello · Fábrica</td><td class="mono">OC 5003 (1002) - 1x Tampo Aurora 1,60m - Personalização: 1x Base Aurora Aço Preto: pintura preta</td></tr>
-          <tr><td><span class="tag">Status</span></td><td>Bling · Tray</td><td>OC enviada · Mercadoria solicitada ao depósito central</td></tr>
+          <tr><td><span class="tag">Prazos</span></td><td>Tabela de frete</td><td>Compra + 19 dias úteis combinados − 4 de frete = <strong>embarque máximo</strong>; − 3 de logística = data dos fornecedores</td></tr>
+          <tr><td><span class="tag">OC 5001</span></td><td>Metalúrgica Aurora</td><td class="mono">Pedido Tray: 1002 | 1x Mesa de Jantar Aurora 1,60m (peça: Base Aurora Aço Preto)</td></tr>
+          <tr><td><span class="tag">OC 5002</span></td><td>Estofados Horizonte</td><td class="mono">Pedido Tray: 1002 | 4x Cadeira Lina - Cor: Grafite</td></tr>
+          <tr><td><span class="tag">OC 5003</span></td><td>Fábrica própria</td><td class="mono">Pedido Tray: 1002 | 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) | PERSONALIZAÇÃO: 1x Mesa de Jantar Aurora 1,60m: pintura preta</td></tr>
+          <tr><td><span class="tag">Card</span></td><td>Trello · Logística</td><td class="mono">Pedido 1002 - 1x Mesa de Jantar Aurora 1,60m (OC 5001, OC 5003), 4x Cadeira Lina - Cor: Grafite (OC 5002) - Rápida Standard · ficha do pedido · checklist com 4 peças</td></tr>
+          <tr><td><span class="tag">Card</span></td><td>Trello · Fábrica</td><td class="mono">OC 5003 (1002) - 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) - Personalização: pintura preta · ficha da OC</td></tr>
+          <tr><td><span class="tag">Status</span></td><td>Bling · Tray</td><td>OC enviada · Aguardando fornecedor</td></tr>
         </tbody>
       </table>
     </div>
@@ -210,11 +215,13 @@
     <h2>Decisões que o código toma sozinho</h2>
     <div class="grade g3" style="margin-top:20px">
       <div class="cartao"><h3>Uma OC por fornecedor</h3><p class="suave">Cada OC lista só os itens que ela compra; a da fábrica sempre mostra item + personalização.</p></div>
-      <div class="cartao"><h3>Prazo com folga</h3><p class="suave">No card da logística, prazo combinado menos 10 dias úteis (20 → 10). Até 10 dias, mantém.</p></div>
-      <div class="cartao"><h3>Dias úteis</h3><p class="suave">Embarque e entrega calculados pulando fins de semana; o embarque desconta o tempo de transporte.</p></div>
+      <div class="cartao"><h3>Prazo pelo frete real</h3><p class="suave">Embarque máximo = entrega combinada menos o frete da tabela até a cidade ou o CEP do cliente. Sem tabela, vale a folga antiga de 10 dias úteis.</p></div>
+      <div class="cartao"><h3>Dias úteis de verdade</h3><p class="suave">Pula fins de semana e feriados nacionais (inclusive Carnaval e Corpus Christi), mais os feriados locais do <code>config.json</code>.</p></div>
+      <div class="cartao"><h3>Atraso à vista</h3><p class="suave">Prazo estourado vira “ATRASADO” no título dos cards e nas fichas; cards parados há mais de 2 dias úteis sobem para o topo da lista.</p></div>
+      <div class="cartao"><h3>Lembretes no tempo certo</h3><p class="suave">Fornecedores: 14 e 7 dias úteis antes, no dia e cobrança diária. Logística: 2 dias úteis antes do embarque, no dia e em atraso.</p></div>
       <div class="cartao"><h3>Nada pela metade</h3><p class="suave">Se uma etapa falha, o programa lista o que já foi criado para ninguém duplicar OC ou card.</p></div>
       <div class="cartao"><h3>Números brasileiros</h3><p class="suave"><code>1.500,50</code>, <code>R$ 30,00</code> e <code>1.500</code> são entendidos corretamente.</p></div>
-      <div class="cartao"><h3>Observações sem perda</h3><p class="suave">Na Tray, o texto é acrescentado — os dados de pagamento já gravados no pedido continuam lá.</p></div>
+      <div class="cartao"><h3>Observações sem perda</h3><p class="suave">Na Tray, o assistente só mexe no seu próprio bloco e relê o pedido antes de gravar: o que outras pessoas escreveram continua lá.</p></div>
     </div>
   </div>
 </section>
@@ -255,9 +262,12 @@
       <div class="modulo"><div><div class="arquivo">app.py</div><p>Janela: telas, botões e o painel que transforma <code>print</code>/<code>input</code> do fluxo em perguntas na tela.</p></div></div>
       <div class="modulo"><div><div class="arquivo">ferramentas_internas.py</div><p>Regras de negócio e fluxo de compras; também roda no terminal.</p></div></div>
       <div class="modulo"><div><div class="arquivo">BLING.py</div><p>OAuth2 do Bling, renovação automática de token, limite de requisições e novas tentativas.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">TRAY.py</div><p>Autenticação da Tray, observações e status do pedido; desligado se não configurado.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">demo.py</div><p>Bling, Trello e Tray simulados com uma loja fictícia, para testes e demonstração.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">testes/</div><p>15 testes automáticos; os do fluxo rodam com a internet bloqueada.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">TRAY.py</div><p>Autenticação da Tray, limites de uso (por minuto e por dia), pedidos, observações e status.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">fichas.py</div><p>Desenha as fichas do pedido e da OC em PNG (Pillow), no lugar dos prints manuais.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">prazos_frete.py</div><p>Converte as planilhas das transportadoras em um JSON leve e calcula o frete até o cliente.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">WHATSAPP.py</div><p>Envio pelo WhatsApp Web com Playwright: horário comercial, limite diário, intervalo entre mensagens e modo teste.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">demo.py</div><p>Bling, Trello, Tray e WhatsApp simulados com uma loja fictícia, para testes e demonstração.</p></div></div>
+      <div class="modulo"><div><div class="arquivo">testes/</div><p>21 testes automáticos; os do fluxo rodam com a internet bloqueada.</p></div></div>
     </div>
   </div>
 </section>
@@ -270,7 +280,7 @@
       <div class="cartao"><h3>Credenciais fora do código</h3><p class="suave">Chaves ficam num <code>config.json</code> local, ignorado pelo Git. O repositório só tem o modelo com campos vazios.</p></div>
       <div class="cartao"><h3>Segredos fora das mensagens</h3><p class="suave">Token do Trello no cabeçalho (não na URL); a Tray mascara chaves e tokens em qualquer erro.</p></div>
       <div class="cartao"><h3>Tokens sem corromper</h3><p class="suave">Gravação atômica: se o programa fechar no meio, o token anterior continua válido.</p></div>
-      <div class="cartao"><h3>Demonstração isolada</h3><p class="suave">O executável de demonstração é gerado sem os módulos de integração: não tem como acessar uma loja real.</p></div>
+      <div class="cartao"><h3>Demonstração isolada</h3><p class="suave">O executável de demonstração é gerado sem os módulos de integração (Bling, Tray e WhatsApp): não tem como acessar uma loja real.</p></div>
     </div>
   </div>
 </section>
@@ -283,7 +293,8 @@
       <div class="cartao">
         <h3>Executável (Windows)</h3>
         <p class="suave">Baixe <code>Assistente do Vendedor - DEMO.exe</code> na aba <em>Releases</em> do repositório e abra.
-          Use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada) ou <strong>1003</strong> (personalização).</p>
+          Use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada, frete pela tabela) ou <strong>1003</strong> (personalização).
+          Veja também a tela <em>Mensagens</em> com os lembretes simulados.</p>
       </div>
       <div class="cartao">
         <h3>Pelo código</h3>
@@ -298,7 +309,7 @@
     <span class="rotulo">Próximos passos</span>
     <h2>Em andamento</h2>
     <div class="grade g2" style="margin-top:20px">
-      <div class="cartao"><h3>Integração com a Tray</h3><p class="suave">Código pronto: observações com as OCs e status sincronizado. Aguardando a homologação do aplicativo.</p></div>
+      <div class="cartao"><h3>Servidor central</h3><p class="suave">Levar o fluxo para um servidor, para funcionar com qualquer computador desligado e com acesso por perfil.</p></div>
       <div class="cartao"><h3>Quadro de vendas</h3><p class="suave">Acompanhamento por vendedor, com alertas de prazo de entrega e de fornecedor atrasado.</p></div>
     </div>
   </div>

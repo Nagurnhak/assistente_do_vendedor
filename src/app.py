@@ -20,7 +20,9 @@ import queue
 import re
 import sys
 import threading
-from datetime import date
+import time
+import webbrowser
+from datetime import date, datetime
 
 import customtkinter as ctk
 
@@ -239,6 +241,24 @@ class TelaInicio(ctk.CTkFrame):
                 side="left", padx=(14, 6), pady=6)
             situacao = ok if isinstance(ok, str) else ("configurado" if ok else "não configurado")
             ctk.CTkLabel(chip, text=f"{nome}: {situacao}", font=fonte(13)).pack(side="left", padx=(0, 14))
+
+        ctk.CTkLabel(self, text="Checklists de separação no Trello", font=fonte(15, True)).pack(
+            anchor="w", padx=36, pady=(30, 4))
+        ctk.CTkLabel(self, text="O Assistente confere as OCs no Bling e atualiza o texto ao lado de cada peça "
+                                "(prazo, atraso, recebida). Os itens continuam desmarcados para a equipe marcar.",
+                     font=fonte(13), text_color=SUAVE, wraplength=820, justify="left").pack(anchor="w", padx=36)
+        linha_ck = ctk.CTkFrame(self, fg_color="transparent")
+        linha_ck.pack(anchor="w", padx=36, pady=(10, 0))
+        self.botao_checklists = ctk.CTkButton(linha_ck, text="Atualizar agora", width=150, height=36,
+                                              font=fonte(13), fg_color="transparent", border_width=1,
+                                              border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                                              command=app.atualizar_checklists)
+        self.botao_checklists.pack(side="left")
+        self.status_checklists = ctk.CTkLabel(linha_ck, text="", font=fonte(13), text_color=SUAVE)
+        self.status_checklists.pack(side="left", padx=12)
+        self.status_a_separar = ctk.CTkLabel(self, text="A Separar: medindo...", font=fonte(13), text_color=SUAVE,
+                                             wraplength=820, justify="left", anchor="w")
+        self.status_a_separar.pack(anchor="w", padx=36, pady=(8, 0))
 
 
 class TelaCalculadora(ctk.CTkFrame):
@@ -478,6 +498,187 @@ class TelaHTML(ctk.CTkFrame):
         self.botao_copiar.configure(text="Copiado ✓")
 
 
+def _sobre_mensagem(m):
+    if m.get("tipo") == "logistica":
+        return f"card da Logística · pedido {m['pedido']}"
+    return f"OC {m['oc_numero']} · pedido {m['pedido']}"
+
+
+class TelaMensagens(ctk.CTkFrame):
+    """Mensagens do dia para os fornecedores (régua de 14 / 7 dias úteis e cobrança diária)."""
+
+    def __init__(self, master, app):
+        super().__init__(master, fg_color="transparent")
+        self.app = app
+        titulo_tela(self, "Mensagens do dia",
+                    "Lembretes e cobranças aos fornecedores e à Logística pelo WhatsApp, "
+                    "conforme a data de embarque do pedido.")
+        barra = ctk.CTkFrame(self, fg_color="transparent")
+        barra.pack(fill="x", padx=36, pady=(0, 12))
+        ctk.CTkButton(barra, text="Atualizar lista", height=38, width=140, font=fonte(13),
+                      fg_color="transparent", border_width=1, border_color=DESTAQUE, text_color=DESTAQUE,
+                      hover_color=CARTAO_HOVER, command=app.atualizar_checklists).pack(side="left")
+        self.botao_enviar = ctk.CTkButton(barra, text="Enviar pelo WhatsApp agora", height=38, width=220,
+                                          font=fonte(13, True), command=lambda: app.enviar_whatsapp())
+        self.botao_enviar.pack(side="left", padx=8)
+        ctk.CTkButton(barra, text="Conectar WhatsApp", height=38, width=160, font=fonte(13),
+                      fg_color="transparent", border_width=1, border_color=DESTAQUE, text_color=DESTAQUE,
+                      hover_color=CARTAO_HOVER, command=app.conectar_whatsapp).pack(side="left")
+        self.status = ctk.CTkLabel(barra, text="", font=fonte(13), text_color=SUAVE)
+        self.status.pack(side="left", padx=12)
+        self.modo = ctk.CTkLabel(self, text="", font=fonte(12), text_color=AMBAR, anchor="w")
+        self.modo.pack(anchor="w", padx=36, pady=(0, 6))
+        self.atualizar_modo()
+
+        linha_visao = ctk.CTkFrame(self, fg_color="transparent")
+        linha_visao.pack(fill="x", padx=36, pady=(0, 8))
+        self.visao = ctk.CTkSegmentedButton(linha_visao, values=["Mensagens de hoje", "Histórico de envios"],
+                                            font=fonte(13), height=34, command=self.trocar_visao)
+        self.visao.set("Mensagens de hoje")
+        self.visao.pack(side="left")
+        self.botao_exportar = ctk.CTkButton(linha_visao, text="Exportar para Excel", height=34, width=160,
+                                            font=fonte(13), fg_color="transparent", border_width=1,
+                                            border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                                            command=self.exportar_historico)
+        self.lista = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.lista.pack(fill="both", expand=True, padx=28, pady=(0, 24))
+        self._mensagens = []
+        self.mostrar_mensagens([])
+
+    def atualizar_modo(self):
+        try:
+            import WHATSAPP
+            c = WHATSAPP.cfg()
+        except Exception:
+            self.modo.configure(text="Envio automático indisponível neste computador (WhatsApp Web não instalado).")
+            return
+        if c["modo_teste"]:
+            texto = ("MODO TESTE: as mensagens vão para os números de teste ("
+                     + ", ".join(c["numeros_teste"] or ["nenhum"]) + "), não para os fornecedores.")
+        else:
+            texto = "Envio para os fornecedores ativado."
+        texto += (f" Envio automático: ligado, a partir das {c['horario']} em dias úteis."
+                  if c["envio_automatico"] else " Envio automático: desligado (use o botão).")
+        self.modo.configure(text=texto, text_color=AMBAR if c["modo_teste"] else SUAVE)
+
+    # ----- visões: mensagens de hoje / histórico -----
+
+    def trocar_visao(self, _=None):
+        if self.visao.get() == "Histórico de envios":
+            self.botao_exportar.pack(side="left", padx=10)
+            self.mostrar_historico()
+        else:
+            self.botao_exportar.pack_forget()
+            self.mostrar_mensagens(self._mensagens)
+
+    def exportar_historico(self):
+        try:
+            caminho = fi.exportar_historico_csv()
+            os.startfile(caminho)  # abre no Excel
+            self.status.configure(text=f"Histórico exportado: {os.path.basename(caminho)}", text_color=VERDE)
+        except Exception as erro:
+            self.status.configure(text=f"Não consegui exportar o histórico: {erro}", text_color=AMBAR)
+
+    def mostrar_historico(self):
+        for filho in self.lista.winfo_children():
+            filho.destroy()
+        envios = fi.carregar_historico(limite=200)
+        if not envios:
+            vazio = ctk.CTkFrame(self.lista, fg_color=CARTAO, corner_radius=14, border_width=1, border_color=BORDA)
+            vazio.pack(fill="x", padx=8, pady=6)
+            ctk.CTkLabel(vazio, text="Nenhum envio registrado ainda", font=fonte(15, True)).pack(
+                anchor="w", padx=18, pady=(14, 2))
+            ctk.CTkLabel(vazio, text="Cada mensagem enviada (automática ou marcada como enviada) fica registrada aqui.",
+                         font=fonte(13), text_color=SUAVE).pack(anchor="w", padx=18, pady=(0, 14))
+            return
+        for e in envios:
+            cartao = ctk.CTkFrame(self.lista, fg_color=CARTAO, corner_radius=12, border_width=1, border_color=BORDA)
+            cartao.pack(fill="x", padx=8, pady=4)
+            topo = ctk.CTkFrame(cartao, fg_color="transparent")
+            topo.pack(fill="x", padx=16, pady=(10, 2))
+            quando = datetime.strptime(e["data_hora"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+            ctk.CTkLabel(topo, text=quando, font=fonte(13, True)).pack(side="left")
+            ctk.CTkLabel(topo, text=f"  {e['fornecedor']} · OC {e['oc']} · pedido {e['pedido']}",
+                         font=fonte(13)).pack(side="left")
+            selos = [("ENVIADA" if e["resultado"] == "enviada" else "FALHOU",
+                      VERDE if e["resultado"] == "enviada" else VERMELHO)]
+            if e["modo"] == "teste":
+                selos.append(("TESTE", AMBAR))
+            selos.append((e["canal"].replace("WhatsApp ", "").upper(), SUAVE))
+            for texto, cor in reversed(selos):
+                ctk.CTkLabel(topo, text=texto, font=fonte(11, True), text_color=cor).pack(side="right", padx=4)
+            detalhe = f"{e['etapa']} · para {e['destino'] or 'sem número'}"
+            if e.get("motivo"):
+                detalhe += f" · {e['motivo']}"
+            ctk.CTkLabel(cartao, text=detalhe, font=fonte(12), text_color=SUAVE, anchor="w").pack(
+                fill="x", padx=16)
+            ctk.CTkLabel(cartao, text=e["texto"], font=fonte(12), wraplength=820, justify="left", anchor="w").pack(
+                fill="x", padx=16, pady=(2, 10))
+
+    def mostrar_mensagens(self, mensagens):
+        self._mensagens = mensagens
+        if self.visao.get() == "Histórico de envios":  # a lista do dia atualiza por trás; recarrega o histórico
+            self.mostrar_historico()
+            return
+        for filho in self.lista.winfo_children():
+            filho.destroy()
+        if not mensagens:
+            vazio = ctk.CTkFrame(self.lista, fg_color=CARTAO, corner_radius=14, border_width=1, border_color=BORDA)
+            vazio.pack(fill="x", padx=8, pady=6)
+            ctk.CTkLabel(vazio, text="Nenhuma mensagem para hoje", font=fonte(15, True)).pack(
+                anchor="w", padx=18, pady=(14, 2))
+            ctk.CTkLabel(vazio, text="Quando uma OC estiver a 14 ou 7 dias úteis do embarque, ou um card da "
+                                     "Logística a 2 dias úteis da data máxima de embarque, ou atrasados, "
+                                     "a mensagem aparece aqui pronta para enviar.",
+                         font=fonte(13), text_color=SUAVE, wraplength=820, justify="left").pack(
+                anchor="w", padx=18, pady=(0, 14))
+            return
+        for mensagem in mensagens:
+            self._cartao(mensagem)
+
+    def _cartao(self, m):
+        cor = {"14": SUAVE, "7": AMBAR, "2": AMBAR, "hoje": DESTAQUE, "atraso": VERMELHO}[m["etapa"]]
+        cartao = ctk.CTkFrame(self.lista, fg_color=CARTAO, corner_radius=14, border_width=1, border_color=BORDA)
+        cartao.pack(fill="x", padx=8, pady=6)
+        topo = ctk.CTkFrame(cartao, fg_color="transparent")
+        topo.pack(fill="x", padx=18, pady=(14, 4))
+        ctk.CTkLabel(topo, text=m["fornecedor_nome"], font=fonte(15, True)).pack(side="left")
+        ctk.CTkLabel(topo, text=f"  {m['rotulo']}", font=fonte(13, True), text_color=cor).pack(side="left")
+        ctk.CTkLabel(topo, text=_sobre_mensagem(m), font=fonte(13), text_color=SUAVE).pack(side="right")
+        ctk.CTkLabel(cartao, text=m["texto"], font=fonte(13), wraplength=820, justify="left", anchor="w").pack(
+            fill="x", padx=18, pady=(2, 8))
+        botoes = ctk.CTkFrame(cartao, fg_color="transparent")
+        botoes.pack(fill="x", padx=18, pady=(0, 14))
+        if m["whatsapp"]:
+            ctk.CTkButton(botoes, text="Abrir no WhatsApp", height=36, font=fonte(13, True),
+                          command=lambda: webbrowser.open(fi.link_whatsapp(m))).pack(side="left")
+        else:
+            ctk.CTkLabel(botoes, text=("Sem WhatsApp: informe o número em whatsapp_logistica no config.json."
+                                       if m.get("tipo") == "logistica" else
+                                       "Sem WhatsApp: cadastre o celular no contato do fornecedor no Bling."),
+                         font=fonte(12), text_color=AMBAR).pack(side="left")
+        if m.get("link"):
+            ctk.CTkButton(botoes, text="Abrir card", height=36, width=110, font=fonte(13), fg_color="transparent",
+                          border_width=1, border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                          command=lambda: webbrowser.open(m["link"])).pack(side="left", padx=(8, 0))
+        ctk.CTkButton(botoes, text="Copiar texto", height=36, width=120, font=fonte(13), fg_color="transparent",
+                      border_width=1, border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                      command=lambda: self.app.copiar(m["texto"])).pack(side="left", padx=8)
+        ctk.CTkButton(botoes, text="Marcar como enviada", height=36, width=170, font=fonte(13), fg_color=VERDE,
+                      hover_color=("#17643F", "#3AA874"),
+                      command=lambda: self._enviada(m, cartao)).pack(side="right")
+
+    def _enviada(self, mensagem, cartao):
+        fi.registrar_mensagem_enviada(mensagem)
+        fi.registrar_historico(mensagem, "WhatsApp manual", "real", mensagem.get("whatsapp"), "enviada",
+                               "confirmado pela equipe")
+        cartao.destroy()
+        self.app.mensagens = [x for x in self.app.mensagens if x is not mensagem]
+        self.app.atualizar_contagem_mensagens()
+        if not self.app.mensagens:
+            self.mostrar_mensagens([])
+
+
 class TelaCompras(ctk.CTkFrame):
     """Mostra só a pergunta da vez + o que o fluxo informou logo antes dela (produto em revisão,
     resumo da OC, avisos). O registro completo fica escondido atrás de um botão."""
@@ -538,13 +739,121 @@ class TelaCompras(ctk.CTkFrame):
         self.console.configure(state="disabled")
         self.registro_visivel = False
 
-        self.ocioso("Clique em “Processar um pedido” para começar.")
+        # --- pedidos da Tray esperando compra (cards) ---
+        self.painel = ctk.CTkFrame(self, fg_color="transparent")
+        topo = ctk.CTkFrame(self.painel, fg_color="transparent")
+        topo.pack(fill="x")
+        self.titulo_pedidos = ctk.CTkLabel(topo, text="Pedidos na Tray para comprar", font=fonte(15, True), anchor="w")
+        self.titulo_pedidos.pack(side="left")
+        self.botao_atualizar = ctk.CTkButton(topo, text="↻  Atualizar", width=120, height=32, font=fonte(12),
+                                             fg_color="transparent", border_width=1, border_color=DESTAQUE,
+                                             text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                                             command=lambda: self.carregar_pedidos(forcar=True))
+        self.botao_atualizar.pack(side="right")
+        self.lista_pedidos = ctk.CTkScrollableFrame(self.painel, fg_color="transparent")
+        self.lista_pedidos.pack(fill="both", expand=True, pady=(8, 0))
+        for coluna in range(3):
+            self.lista_pedidos.grid_columnconfigure(coluna, weight=1, uniform="cards")
+        self.painel.pack(fill="both", expand=True, padx=36, pady=(0, 24))
+        self._carregado_em = 0
+        self._carregando = False
+
+        self.ocioso("Escolha um pedido abaixo ou clique em “Processar um pedido” para digitar o número.")
 
     # ----- estados -----
 
     def ao_mostrar(self):
         if self.aguardando == "texto":
             self.entrada.focus_set()
+        if not self.rodando:
+            self.carregar_pedidos()
+
+    # ----- pedidos da Tray (cards) -----
+
+    def carregar_pedidos(self, forcar=False):
+        """Busca na Tray (em segundo plano, só leitura) os pedidos nos status de compra."""
+        if self.rodando or self._carregando or (not forcar and time.time() - self._carregado_em < 60):
+            return
+        self._carregando = True
+        self.titulo_pedidos.configure(text="Buscando pedidos na Tray...")
+        self.botao_atualizar.configure(state="disabled")
+
+        def terminou(pedidos, erro):
+            self._carregando = False
+            self.botao_atualizar.configure(state="normal")
+            if erro:
+                self.titulo_pedidos.configure(text="Não consegui buscar os pedidos na Tray (veja o registro completo).")
+                return
+            self._carregado_em = time.time()
+            self.mostrar_pedidos(pedidos)
+
+        self.app.em_segundo_plano(fi.pedidos_para_comprar, terminou)
+
+    def mostrar_pedidos(self, pedidos):
+        for filho in self.lista_pedidos.winfo_children():
+            filho.destroy()
+        self.titulo_pedidos.configure(text=f"Pedidos na Tray para comprar ({len(pedidos)})")
+        if not pedidos:
+            ctk.CTkLabel(self.lista_pedidos, text="Nenhum pedido nos status de compra da Tray (config: compras.status_tray).",
+                         font=fonte(13), text_color=SUAVE).grid(row=0, column=0, columnspan=3, sticky="w", pady=8)
+            return
+        for i, pedido in enumerate(pedidos):
+            self._card_pedido(pedido).grid(row=i // 3, column=i % 3, sticky="nsew", padx=6, pady=6)
+
+    ALTURA_CARD = 300
+    ITENS_NO_CARD = 4
+    LETRAS_POR_ITEM = 46
+
+    def _card_pedido(self, p):
+        """Card de tamanho fixo: até 4 produtos (um por linha) e '+ N item(ns)' para o resto.
+        Borda vermelha: mais de 1 dia útil esperando a compra. Borda âmbar: já tem OC/card (risco de duplicar)."""
+        def data_br(texto):
+            texto = str(texto or "")[:10]
+            return f"{texto[8:10]}/{texto[5:7]}/{texto[:4]}" if len(texto) == 10 and not texto.startswith("0000") else "—"
+
+        def linha(texto):
+            texto = f"• {texto}"
+            return texto if len(texto) <= self.LETRAS_POR_ITEM else texto[:self.LETRAS_POR_ITEM - 1].rstrip() + "…"
+
+        duplicar = p.get("ja_tem_oc") or p.get("ja_tem_card")
+        dias = int(p.get("dias_esperando") or 0)
+        atrasado = dias > 1
+        borda = VERMELHO if atrasado else AMBAR if duplicar else BORDA
+        card = ctk.CTkFrame(self.lista_pedidos, fg_color=CARTAO, corner_radius=14, border_width=2 if atrasado else 1,
+                            border_color=borda, height=self.ALTURA_CARD)
+        card.pack_propagate(False)  # todos do mesmo tamanho, qualquer que seja a quantidade de itens
+        ctk.CTkLabel(card, text=f"Pedido {p['numero']}", font=fonte(15, True), anchor="w").pack(
+            fill="x", padx=14, pady=(12, 0))
+        try:
+            total = fi.formatar_reais(float(p.get("total") or 0))
+        except (TypeError, ValueError):
+            total = ""
+        ctk.CTkLabel(card, text=f"{p.get('status') or ''} · {data_br(p.get('data'))} · {total}", font=fonte(12),
+                     text_color=SUAVE, anchor="w").pack(fill="x", padx=14)
+        itens = p.get("itens") or []
+        linhas = [linha(i) for i in itens[:self.ITENS_NO_CARD]] or ["(itens não lidos)"]
+        if len(itens) > self.ITENS_NO_CARD:
+            linhas.append(f"+ {len(itens) - self.ITENS_NO_CARD} item(ns)")
+        linhas += [""] * (self.ITENS_NO_CARD + 1 - len(linhas))  # mesmo espaço em todos os cards
+        ctk.CTkLabel(card, text="\n".join(linhas), font=fonte(12), anchor="nw", justify="left").pack(
+            fill="x", padx=14, pady=(6, 0))
+        ctk.CTkLabel(card, text=f"Entrega prevista (Tray): {data_br(p.get('entrega'))}", font=fonte(12),
+                     text_color=SUAVE, anchor="w").pack(fill="x", padx=14, pady=(4, 0))
+        avisos = []
+        if atrasado:
+            avisos.append((f"⚠ Há {dias} dias úteis aguardando compra", VERMELHO))
+        textos = [t for t, ok in (("Já tem OC anotada na Tray", p.get("ja_tem_oc")),
+                                  ("Já tem card no Trello", p.get("ja_tem_card"))) if ok]
+        if textos:
+            avisos.append(("⚠ " + " · ".join(textos), AMBAR))
+        for texto, cor in avisos:
+            ctk.CTkLabel(card, text=texto, font=fonte(12, True), text_color=cor, anchor="w").pack(fill="x", padx=14)
+        estilo = ({"fg_color": "transparent", "border_width": 1, "border_color": AMBAR, "text_color": AMBAR,
+                   "hover_color": CARTAO_HOVER} if duplicar else {})
+        ctk.CTkButton(card, text="Processar mesmo assim" if duplicar else "Processar", height=36, font=fonte(13, True),
+                      command=lambda n=p["numero"]: self.iniciar(n), **estilo).pack(side="bottom", fill="x",
+                                                                                    padx=14, pady=12)
+        return card
 
     def ocioso(self, texto):
         self.aguardando = None
@@ -666,10 +975,14 @@ class TelaCompras(ctk.CTkFrame):
 
     # ----- fluxo -----
 
-    def iniciar(self):
+    def iniciar(self, numero=None):
+        """numero: pedido escolhido num card; sem ele, o fluxo pergunta o número."""
+        if self.rodando:
+            return
         self.rodando = True
         self.buffer = []
         self._mostrar_contexto()
+        self.painel.pack_forget()
         self.botao_iniciar.configure(state="disabled", text="Pedido em andamento...")
         self.pergunta.configure(text="Carregando...")
         if self.console.get("1.0", "end").strip():
@@ -677,7 +990,7 @@ class TelaCompras(ctk.CTkFrame):
 
         def fluxo():
             try:
-                fi.processar_pedido()
+                fi.processar_pedido(numero)
                 if fi.MODO_DEMO:
                     import demo
                     print("\n[demonstração] O que foi 'criado' até agora (só na memória):\n" + demo.resumo())
@@ -688,8 +1001,10 @@ class TelaCompras(ctk.CTkFrame):
             self._mostrar_contexto()
             self.rodando = False
             self.botao_iniciar.configure(state="normal", text="▶  Processar outro pedido")
-            self.ocioso("Pedido finalizado. Clique em “Processar outro pedido” para continuar.")
+            self.ocioso("Pedido finalizado. Escolha o próximo pedido abaixo ou clique em “Processar outro pedido”.")
             self.escrever("\n——— fim do pedido ———\n", "resposta", contexto=False)
+            self.painel.pack(fill="both", expand=True, padx=36, pady=(0, 24), after=self.cartao)
+            self.carregar_pedidos(forcar=True)  # o pedido processado muda de status e sai da lista
 
         self.app.em_segundo_plano(fluxo, terminou)
 
@@ -767,6 +1082,7 @@ class App(ctk.CTk):
         ("inicio", "🏠   Início"),
         ("calculadora", "🧮   Calculadora"),
         ("compras", "🛒   Compras"),
+        ("mensagens", "💬   Mensagens"),
         ("html", "📝   Descrição HTML"),
     ]
 
@@ -784,18 +1100,19 @@ class App(ctk.CTk):
             pass
 
         self.ponte = Ponte()
+        self.terminados = queue.Queue()  # tarefas em segundo plano que terminaram
         sys.stdout = sys.stderr = self.ponte
         builtins.input = self.ponte.input
         fi._escolha_externa = self.ponte.escolher
 
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)  # linha 0: faixa da demonstração (vazia no uso normal)
         self._montar_lateral()
         if fi.MODO_DEMO:
             faixa = ctk.CTkFrame(self, fg_color=CARTAO_HOVER, corner_radius=0)
             faixa.grid(row=0, column=1, sticky="ew")
             ctk.CTkLabel(faixa, text="MODO DEMONSTRAÇÃO  ·  loja, produtos e pedidos fictícios  ·  nada é enviado ao "
-                                     "Bling, Trello ou Tray  ·  pedidos de exemplo: 1001, 1002 e 1003",
+                                     "Bling, Trello, Tray ou WhatsApp  ·  pedidos de exemplo: 1001, 1002 e 1003",
                          font=fonte(13, True), text_color=DESTAQUE).pack(anchor="w", padx=24, pady=9)
         self.area = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
         self.area.grid(row=1, column=1, sticky="nsew")
@@ -805,11 +1122,230 @@ class App(ctk.CTk):
             "inicio": TelaInicio(self.area, self),
             "calculadora": TelaCalculadora(self.area, self),
             "compras": TelaCompras(self.area, self),
+            "mensagens": TelaMensagens(self.area, self),
             "html": TelaHTML(self.area, self),
         }
+        self.mensagens = []
+        self.aviso_mensagens_dado = None  # dia em que o aviso / envio automático já aconteceu
+        self.enviando_whatsapp = False
         self.atual = None
         self.mostrar("inicio")
         self.after(80, self._receber)
+        self.atualizando_checklists = False
+        self.after(5000, self._checklists_automatico)
+
+    INTERVALO_CHECKLISTS_MS = 60 * 60 * 1000  # de hora em hora, enquanto o Assistente estiver aberto
+
+    def _checklists_automatico(self):
+        # Sempre roda: mede a lista A Separar mesmo sem cards com OC em acompanhamento
+        # (sem acompanhamento, a parte do Bling nem é chamada).
+        self.atualizar_checklists(automatico=True)
+        self.after(self.INTERVALO_CHECKLISTS_MS, self._checklists_automatico)
+
+    def atualizar_checklists(self, automatico=False):
+        """Confere as OCs no Bling, atualiza o texto das checklists no Trello e monta as mensagens do dia
+        aos fornecedores (tudo em segundo plano)."""
+        if self.atualizando_checklists:
+            return
+        self.atualizando_checklists = True
+        inicio, tela_msg = self.telas["inicio"], self.telas["mensagens"]
+        inicio.botao_checklists.configure(text="Atualizando...")
+        inicio.status_checklists.configure(text="Conferindo as OCs no Bling...", text_color=SUAVE)
+        tela_msg.status.configure(text="Conferindo as OCs no Bling...", text_color=SUAVE)
+
+        def conferir():
+            try:
+                a_separar = fi.resumo_a_separar(fi.organizar_a_separar(aplicar=True))
+            except Exception as erro:
+                a_separar = f"A Separar: não consegui medir agora ({erro})."
+            resumo, mensagens = fi.atualizar_checklists(), fi.mensagens_do_dia()
+            try:
+                mensagens += fi.mensagens_logistica()
+            except Exception as erro:
+                a_separar += f" | Lembretes da Logística: não consegui montar agora ({erro})."
+            return resumo, mensagens, a_separar
+
+        def terminou(resultado, erro):
+            self.atualizando_checklists = False
+            inicio.botao_checklists.configure(text="Atualizar agora")
+            agora = datetime.now().strftime("%H:%M")
+            if erro:
+                inicio.status_checklists.configure(text=f"Não consegui atualizar às {agora}: {erro}",
+                                                   text_color=AMBAR)
+                tela_msg.status.configure(text=f"Não consegui atualizar às {agora}.", text_color=AMBAR)
+                return
+            resumo, self.mensagens, a_separar = resultado
+            inicio.status_checklists.configure(text=f"{resumo} (às {agora})", text_color=SUAVE)
+            inicio.status_a_separar.configure(text=f"{a_separar} (às {agora})",
+                                              text_color=AMBAR if "parados há" in a_separar and " 0 parados" not in a_separar else SUAVE)
+            tela_msg.status.configure(text=f"Atualizado às {agora}", text_color=SUAVE)
+            tela_msg.mostrar_mensagens(self.mensagens)
+            self.atualizar_contagem_mensagens()
+            if automatico and self.mensagens and self.aviso_mensagens_dado != date.today():
+                modo = self._modo_envio()
+                if modo != "esperar":  # antes do horário: a conferência da próxima hora tenta de novo
+                    self.aviso_mensagens_dado = date.today()
+                    if modo == "automatico":
+                        self.enviar_whatsapp(automatico=True)
+                    else:
+                        self.avisar_mensagens(len(self.mensagens))
+
+        self.em_segundo_plano(conferir, terminou)
+
+    @staticmethod
+    def _modo_envio():
+        """'automatico' (manda sozinho agora), 'esperar' (ligado, mas ainda não deu o horário) ou 'manual'."""
+        try:
+            import WHATSAPP
+            c = WHATSAPP.cfg()
+        except Exception:
+            return "manual"
+        if not c["envio_automatico"]:
+            return "manual"
+        agora = datetime.now()
+        inicio = datetime.strptime(c["horario"], "%H:%M").time()
+        if agora.weekday() < 5 and agora.time() < inicio:
+            return "esperar"
+        return "automatico" if WHATSAPP.em_horario_comercial(agora) else "manual"
+
+    def enviar_whatsapp(self, automatico=False):
+        """Manda as mensagens do dia pelo WhatsApp Web do Assistente (em segundo plano)."""
+        tela = self.telas["mensagens"]
+        if self.enviando_whatsapp:
+            return
+        pendentes = list(self.mensagens)
+        if not pendentes:
+            tela.status.configure(text="Nenhuma mensagem para enviar.", text_color=SUAVE)
+            return
+        self.enviando_whatsapp = True
+        tela.botao_enviar.configure(text="Enviando...")
+        tela.status.configure(text=f"Enviando {len(pendentes)} pelo WhatsApp (o navegador do Assistente vai abrir)...",
+                              text_color=SUAVE)
+
+        def trabalho():
+            import WHATSAPP
+            return WHATSAPP.enviar_lote(pendentes, ao_enviar=fi.registrar_mensagem_enviada), WHATSAPP.cfg()["modo_teste"]
+
+        def terminou(resultado, erro):
+            self.enviando_whatsapp = False
+            tela.botao_enviar.configure(text="Enviar pelo WhatsApp agora")
+            agora = datetime.now().strftime("%H:%M")
+            if erro:
+                tela.status.configure(text=f"O envio falhou às {agora}: {erro}", text_color=AMBAR)
+                if automatico:
+                    self.avisar_mensagens(len(self.mensagens))
+                return
+            (enviadas, falhas), teste = resultado
+            if not teste:  # no modo teste nada é dado como enviado ao fornecedor
+                self.mensagens = [m for m in self.mensagens if all(m is not e for e in enviadas)]
+                self.atualizar_contagem_mensagens()
+            tela.mostrar_mensagens(self.mensagens)  # (se o histórico estiver aberto, ele é recarregado)
+            texto = f"{len(enviadas)} {'enviada' if len(enviadas) == 1 else 'enviadas'}{' (teste)' if teste else ''} às {agora}"
+            if falhas:
+                texto += f" · {len(falhas)} não {'foi' if len(falhas) == 1 else 'foram'}: {falhas[0][1]}"
+            tela.status.configure(text=texto, text_color=AMBAR if falhas else VERDE)
+            if automatico and falhas:
+                self.avisar_mensagens(len(self.mensagens))
+
+        self.em_segundo_plano(trabalho, terminou)
+
+    def conectar_whatsapp(self):
+        """Abre o WhatsApp Web do Assistente para ler o QR code (uma vez; a sessão fica salva)."""
+        tela = self.telas["mensagens"]
+        if self.enviando_whatsapp:
+            return
+        self.enviando_whatsapp = True
+        tela.status.configure(text="Abrindo o WhatsApp Web: leia o QR code com o celular do número de compras "
+                                   "(até 3 minutos)...", text_color=SUAVE)
+
+        def trabalho():
+            import WHATSAPP
+            return WHATSAPP.conectar(180)
+
+        def terminou(conectado, erro):
+            self.enviando_whatsapp = False
+            if erro:
+                tela.status.configure(text=f"WhatsApp não conectado: {erro}", text_color=AMBAR)
+            elif not conectado:
+                tela.status.configure(text="WhatsApp não conectado. Tente de novo e leia o QR code a tempo.",
+                                      text_color=AMBAR)
+            else:
+                tela.status.configure(text="WhatsApp conectado. A sessão ficou salva neste computador.",
+                                      text_color=VERDE)
+
+        self.em_segundo_plano(trabalho, terminou)
+
+    def atualizar_contagem_mensagens(self):
+        quantidade = len(self.mensagens)
+        self.botoes_nav["mensagens"].configure(
+            text=f"💬   Mensagens ({quantidade})" if quantidade else "💬   Mensagens")
+
+    MAX_NO_AVISO = 6
+
+    def avisar_mensagens(self, quantidade):
+        """Pop-up: pedidos chegando na data ou atrasados, com 'Enviar no WhatsApp' em cada um.
+        O botão abre a conversa com o texto pronto; depois de enviar, 'Já enviei' tira da lista."""
+        aviso = ctk.CTkToplevel(self)
+        aviso.title(TITULO)
+        aviso.resizable(False, False)
+        aviso.attributes("-topmost", True)
+        texto = "1 mensagem" if quantidade == 1 else f"{quantidade} mensagens"
+        ctk.CTkLabel(aviso, text=f"Hoje há {texto} para fornecedores e Logística", font=fonte(16, True)).pack(
+            padx=24, pady=(20, 2), anchor="w")
+        ctk.CTkLabel(aviso, text="Clique em “Enviar no WhatsApp”, envie e depois confirme em “Já enviei”.",
+                     font=fonte(12), text_color=SUAVE).pack(padx=24, anchor="w")
+        lista = ctk.CTkFrame(aviso, fg_color="transparent")
+        lista.pack(fill="x", padx=18, pady=(10, 0))
+        cores = {"14": SUAVE, "7": AMBAR, "2": AMBAR, "hoje": DESTAQUE, "atraso": VERMELHO}
+
+        for m in self.mensagens[:self.MAX_NO_AVISO]:
+            linha = ctk.CTkFrame(lista, fg_color=CARTAO, corner_radius=10, border_width=1, border_color=BORDA)
+            linha.pack(fill="x", pady=3)
+            textos = ctk.CTkFrame(linha, fg_color="transparent")
+            textos.pack(side="left", padx=12, pady=8)
+            ctk.CTkLabel(textos, text=(f"Logística · card do pedido {m['pedido']}" if m.get("tipo") == "logistica"
+                                       else f"{m['fornecedor_nome']} · OC {m['oc_numero']}"), font=fonte(13, True),
+                         anchor="w").pack(anchor="w")
+            ctk.CTkLabel(textos, text=f"{m['rotulo']} · pedido {m['pedido']}", font=fonte(12),
+                         text_color=cores[m["etapa"]], anchor="w").pack(anchor="w")
+
+            def ja_enviei(mensagem=m, linha=linha):
+                fi.registrar_mensagem_enviada(mensagem)
+                fi.registrar_historico(mensagem, "WhatsApp manual", "real", mensagem.get("whatsapp"), "enviada",
+                                       "confirmado pela equipe")
+                self.mensagens = [x for x in self.mensagens if x is not mensagem]
+                self.telas["mensagens"].mostrar_mensagens(self.mensagens)
+                self.atualizar_contagem_mensagens()
+                linha.destroy()
+
+            ctk.CTkButton(linha, text="Já enviei", width=90, height=32, font=fonte(12), fg_color=VERDE,
+                          hover_color=("#17643F", "#3AA874"), command=ja_enviei).pack(side="right", padx=(4, 10))
+            if m["whatsapp"]:
+                ctk.CTkButton(linha, text="Enviar no WhatsApp", width=150, height=32, font=fonte(12, True),
+                              command=lambda mensagem=m: webbrowser.open(fi.link_whatsapp(mensagem))).pack(side="right")
+            else:
+                ctk.CTkLabel(linha, text="sem WhatsApp" if m.get("tipo") == "logistica" else "sem WhatsApp no Bling",
+                             font=fonte(12), text_color=AMBAR).pack(
+                    side="right", padx=6)
+        if quantidade > self.MAX_NO_AVISO:
+            ctk.CTkLabel(aviso, text=f"…e mais {quantidade - self.MAX_NO_AVISO} na tela Mensagens.", font=fonte(12),
+                         text_color=SUAVE).pack(padx=24, anchor="w", pady=(4, 0))
+
+        botoes = ctk.CTkFrame(aviso, fg_color="transparent")
+        botoes.pack(fill="x", padx=24, pady=16)
+
+        def abrir():
+            aviso.destroy()
+            self.deiconify()
+            self.lift()
+            self.mostrar("mensagens")
+
+        ctk.CTkButton(botoes, text="Ver todas", height=36, width=110, font=fonte(13), fg_color="transparent",
+                      border_width=1, border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                      command=abrir).pack(side="left")
+        ctk.CTkButton(botoes, text="Fechar", height=36, width=90, font=fonte(13), fg_color="transparent",
+                      border_width=1, border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
+                      command=aviso.destroy).pack(side="left", padx=10)
 
     def _montar_lateral(self):
         lateral = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color=LATERAL)
@@ -817,7 +1353,7 @@ class App(ctk.CTk):
         lateral.grid_propagate(False)
         marca = ctk.CTkFrame(lateral, fg_color="transparent")
         marca.pack(fill="x", padx=20, pady=(26, 30))
-        ctk.CTkLabel(marca, text="A", width=44, height=44, corner_radius=12, fg_color=DESTAQUE,
+        ctk.CTkLabel(marca, text="B", width=44, height=44, corner_radius=12, fg_color=DESTAQUE,
                      text_color="#FFFFFF", font=fonte(24, True)).pack(side="left")
         textos = ctk.CTkFrame(marca, fg_color="transparent")
         textos.pack(side="left", padx=12)
@@ -864,8 +1400,8 @@ class App(ctk.CTk):
             except Exception as e:
                 erro = e
                 print(f"\n=== ERRO ===\n{e}")
-            if ao_terminar:
-                self.after(0, lambda: ao_terminar(resultado, erro))
+            if ao_terminar:  # a janela chama ao_terminar no próprio loop (Tk não é seguro entre threads)
+                self.terminados.put((ao_terminar, resultado, erro))
         threading.Thread(target=correr, daemon=True).start()
 
     def _receber(self):
@@ -890,6 +1426,15 @@ class App(ctk.CTk):
                     self.ponte.respostas.put(self._perguntar_em_dialogo(pergunta, opcoes))
         except queue.Empty:
             pass
+        try:
+            while True:
+                ao_terminar, resultado, erro = self.terminados.get_nowait()
+                try:
+                    ao_terminar(resultado, erro)
+                except Exception as falha:  # um erro na tela não pode parar o loop da janela
+                    print(f"\n=== ERRO ===\n{falha}")
+        except queue.Empty:
+            pass
         self.after(80, self._receber)
 
     def _perguntar_em_dialogo(self, pergunta, opcoes):
@@ -909,5 +1454,29 @@ class App(ctk.CTk):
         self.update()
 
 
+def diagnosticar_whatsapp():
+    """'Assistente do Vendedor.exe --diagnostico-whatsapp': abre o navegador do WhatsApp escondido e anota
+    o resultado em diagnostico_whatsapp.txt (para conferir o .exe sem precisar clicar em nada)."""
+    import traceback
+    from configuracao import pasta_base
+    caminho = os.path.join(pasta_base(), "diagnostico_whatsapp.txt")
+    try:
+        import WHATSAPP  # noqa: F401  (ajusta o caminho do navegador no .exe)
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            navegador = p.chromium.launch(headless=True)
+            pagina = navegador.new_page()
+            pagina.set_content("<h1>ok</h1>")
+            resultado = f"OK: navegador abriu ({pagina.inner_text('h1')}) | {os.environ.get('PLAYWRIGHT_BROWSERS_PATH')}"
+            navegador.close()
+    except Exception:
+        resultado = "ERRO:\n" + traceback.format_exc()
+    with open(caminho, "w", encoding="utf-8") as f:
+        f.write(resultado + "\n")
+
+
 if __name__ == "__main__":
-    App().mainloop()
+    if "--diagnostico-whatsapp" in sys.argv:
+        diagnosticar_whatsapp()
+    else:
+        App().mainloop()

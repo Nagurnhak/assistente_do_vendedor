@@ -2,14 +2,15 @@
   "trello": {
     "key": "SUA_TRELLO_KEY",
     "token": "SEU_TRELLO_TOKEN",
-    "lista_logistica_id": "ID_DA_LISTA_LOGISTICA",
+    "lista_logistica_id": "ID_DA_LISTA_A_SEPARAR_DA_LOGISTICA",
     "listas_fabrica": [
       {"nome": "Responsável: Etapa", "id": "ID_DA_LISTA"}
     ]
   },
   "bling": {
     "client_id": "SEU_CLIENT_ID",
-    "client_secret": "SEU_CLIENT_SECRET"
+    "client_secret": "SEU_CLIENT_SECRET",
+    "url_lista_ocs": "https://www.bling.com.br/pedidos.compra.php#list"
   },
   "tray": {
     "consumer_key": "SUA_CONSUMER_KEY",
@@ -17,8 +18,11 @@
     "code": "SEU_CODE",
     "api_address": "URL_DA_API_DA_LOJA (ex.: https://www.sualoja.com.br/web_api)",
     "campo_observacao": "store_note",
-    "status_oc_enviada": "Mercadoria Solicitada ao depósito central",
+    "status_oc_enviada": "Aguardando fornecedor",
     "status_separacao": "Pedido em separação"
+  },
+  "compras": {
+    "status_tray": ["A Enviar", "Liberado"]
   },
   "fabrica": {
     "nome": "Nome da fábrica no Bling",
@@ -26,7 +30,30 @@
     "contato_id": null
   },
   "loja": {
+    "nome": "Nome da loja (aparece nas mensagens aos fornecedores)",
     "sufixo_nos_produtos": "nome da loja que aparece no fim dos produtos (opcional)"
   },
-  "prazo_transporte_dias_uteis": 5
+  "prazo_transporte_dias_uteis": 5,
+  "feriados_extras": ["25/01"],
+  "prazos_frete": {
+    "pasta": "PASTA_COM_AS_PLANILHAS_DAS_TRANSPORTADORAS",
+    "regiao_local": {"nome": "Grande São Paulo", "uf": "SP", "cep_inicio": "01000000", "cep_fim": "09999999", "dias": 1},
+    "transportadoras": [
+      {"chave": "rapida", "nome": "Transportadora Rápida", "arquivo": "rapida", "tipo": "cidade",
+       "colunas": {"uf": 4, "cidade": 5, "pj": 9, "pf": 10}, "primeira_linha": 2},
+      {"chave": "expressa", "nome": "Expressa Cargas", "arquivo": "expressa", "tipo": "cep", "aba": "Faixa de CEP",
+       "colunas": {"cep_inicio": 6, "cep_fim": 7, "dias": 10}}
+    ]
+  },
+  "whatsapp_envio": {
+    "modo_teste": true,
+    "numeros_teste": ["SEU_NUMERO_DE_TESTE"],
+    "envio_automatico": false,
+    "horario": "09:00",
+    "horario_limite": "18:00",
+    "limite_diario": 40,
+    "intervalo_segundos": [30, 90]
+  },
+  "whatsapp_fornecedores": {"ID_DO_CONTATO_NO_BLING": "NUMERO (se não quiser usar o celular do cadastro)"},
+  "whatsapp_logistica": "NUMERO_DA_LOGISTICA"
 }

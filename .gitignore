@@ -14,3 +14,15 @@ dist/
 
 # Versões antigas e rascunhos locais
 antigos/
+
+# Dados de trabalho gerados pelo programa (pedidos, mensagens, sessões): ficam só no computador
+prazos_frete.json
+acompanhamento*.json
+mensagens_enviadas.json
+historico_mensagens.*
+whatsapp_teste.json
+tray_uso.json
+diagnostico_*.txt
+whatsapp_sessao*/
+tabelas_frete/
+NOTAS_LOCAIS.md

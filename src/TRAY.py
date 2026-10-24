@@ -6,7 +6,8 @@ Autenticação com a API da Tray + funções usadas pelo ferramentas_internas.py
 - Os tokens ficam em tray_tokens.json, na mesma pasta do script/.exe.
 - O access_token (~3 h) é renovado sozinho com o refresh_token (~30 dias). Se o refresh
   também vencer, gera de novo com o code; se o code não for aceito, pede um novo.
-- Respeita o limite da Tray (180 requisições por minuto) e tenta de novo em caso de erro 429.
+- Respeita os limites da Tray (180 requisições por minuto e 10.000 por dia): intervalo mínimo,
+  janela de 60 s, contador diário e nova tentativa no erro 429 (respeitando o Retry-After).
 
 Enquanto a seção "tray" não estiver preenchida, tray_configurada() devolve False e o
 ferramentas_internas.py simplesmente pula a parte da Tray.
@@ -19,6 +20,7 @@ import os
 import sys
 import time
 import unicodedata
+from collections import deque
 from datetime import datetime
 
 import requests
@@ -189,12 +191,59 @@ def pegar_access_token(forcar_renovacao=False):
 # CHAMADAS
 # ---------------------------------------------------------------------------
 
+# Rate limit da Tray: 180 requisições/minuto e 10.000/dia por loja. O app fica abaixo dos dois com folga:
+#   - intervalo mínimo de 0,35 s entre chamadas;
+#   - janela deslizante de 60 s com no máximo LIMITE_POR_MINUTO chamadas (se encher, espera abrir vaga);
+#   - contador diário em tray_uso.json; ao chegar em LIMITE_DIARIO, para de chamar até o dia seguinte;
+#   - HTTP 429: respeita o Retry-After (se vier) ou espera 2, 4, 8, 16 s antes de tentar de novo.
+LIMITE_POR_MINUTO = 170
+LIMITE_DIARIO = 9500
+ARQUIVO_USO = os.path.join(pasta_base(), "tray_uso.json")
+_janela = deque()
+
+
+def _uso_de_hoje():
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(ARQUIVO_USO, "r", encoding="utf-8") as f:
+            uso = json.load(f)
+    except (FileNotFoundError, ValueError):
+        uso = {}
+    return uso if uso.get("dia") == hoje else {"dia": hoje, "chamadas": 0}
+
+
+def _contar_chamada():
+    uso = _uso_de_hoje()
+    if uso["chamadas"] >= LIMITE_DIARIO:
+        raise RuntimeError(f"Limite diário de {LIMITE_DIARIO} chamadas à Tray atingido; o app volta amanhã.")
+    uso["chamadas"] += 1
+    with open(ARQUIVO_USO + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(uso, f)
+    os.replace(ARQUIVO_USO + ".tmp", ARQUIVO_USO)
+
+
 def _esperar_vez():
+    """Segura a chamada até caber no limite por minuto e no intervalo mínimo."""
     global _ultima_chamada
-    espera = INTERVALO_MINIMO - (time.time() - _ultima_chamada)
+    agora = time.time()
+    while _janela and agora - _janela[0] >= 60:
+        _janela.popleft()
+    if len(_janela) >= LIMITE_POR_MINUTO:
+        time.sleep(60 - (agora - _janela[0]) + 0.05)
+        return _esperar_vez()
+    espera = INTERVALO_MINIMO - (agora - _ultima_chamada)
     if espera > 0:
         time.sleep(espera)
     _ultima_chamada = time.time()
+    _janela.append(_ultima_chamada)
+    _contar_chamada()
+
+
+def _espera_429(resposta, tentativa):
+    try:
+        return min(float(resposta.headers.get("Retry-After")), 60.0)
+    except (TypeError, ValueError):
+        return 2.0 * (2 ** tentativa)  # 2, 4, 8, 16 s
 
 
 def chamar_tray(metodo, caminho, params=None, **kwargs):
@@ -210,7 +259,7 @@ def chamar_tray(metodo, caminho, params=None, **kwargs):
             pegar_access_token(forcar_renovacao=True)
             continue
         if resposta.status_code == 429 and tentativa < TENTATIVAS_429:
-            time.sleep(1.5 * (tentativa + 1))
+            time.sleep(_espera_429(resposta, tentativa))
             continue
         break
 
@@ -233,6 +282,61 @@ def obter_pedido(numero):
     return chamar_tray("GET", f"/orders/{numero}").get("Order", {}) or {}
 
 
+def entrega_prevista(numero):
+    """Data de entrega que a própria Tray calculou para o pedido ('aaaa-mm-dd'), ou None (só leitura)."""
+    data = str(obter_pedido(numero).get("estimated_delivery_date") or "").strip()
+    return data if data and not data.startswith("0000") else None
+
+
+def pedidos_por_status(nomes_status):
+    """Pedidos da loja nos status informados (só leitura): [{'numero', 'data', 'status', 'total', 'entrega'}].
+    Os nomes são comparados sem acento/maiúscula com os status que existem na loja; os que não existem são pulados."""
+    na_loja = {_sem_acento(s.get("status", "")): s.get("status") for s in listar_status()}
+    pedidos = []
+    for nome in nomes_status:
+        exato = na_loja.get(_sem_acento(nome))
+        if not exato:
+            continue
+        pagina = 1
+        while True:
+            dados = chamar_tray("GET", "/orders", params={"status": exato, "limit": 50, "page": pagina})
+            for item in dados.get("Orders") or []:
+                pedido = item.get("Order") or item
+                pedidos.append({"numero": str(pedido.get("id")), "data": pedido.get("date"), "status": pedido.get("status"),
+                                "total": pedido.get("total"), "entrega": pedido.get("estimated_delivery_date")})
+            paginacao = dados.get("paging") or {}
+            if pagina * int(paginacao.get("limit") or 50) >= int(paginacao.get("total") or 0):
+                break
+            pagina += 1
+    return pedidos
+
+
+def pedido_completo(numero):
+    """Pedido com cliente, endereços, itens vendidos e imagens (só leitura), para a ficha do pedido."""
+    return chamar_tray("GET", f"/orders/{numero}/complete").get("Order", {}) or {}
+
+
+def detalhes_pedido(numero):
+    """Itens vendidos e observação do pedido, numa leitura só (para os cards da tela de Compras)."""
+    pedido = chamar_tray("GET", f"/orders/{numero}/complete").get("Order", {}) or {}
+    return {"itens": _itens_de(pedido), "observacao": pedido.get(campo_observacao()) or ""}
+
+
+def itens_vendidos(numero):
+    """Itens do pedido como o cliente comprou: [{'nome', 'quantidade', 'referencia'}] (só leitura).
+    O nome vem como está na loja, às vezes com HTML da variação (ex.: '<br><strong>Cor</strong> Azul')."""
+    return _itens_de(chamar_tray("GET", f"/orders/{numero}/complete").get("Order", {}) or {})
+
+
+def _itens_de(pedido):
+    itens = []
+    for vendido in pedido.get("ProductsSold") or []:
+        vendido = vendido.get("ProductsSold") or vendido
+        itens.append({"nome": vendido.get("name") or "", "quantidade": vendido.get("quantity"),
+                      "referencia": str(vendido.get("reference") or "").strip()})
+    return itens
+
+
 def adicionar_observacao(numero, texto):
     """Acrescenta o texto nas observações do pedido, mantendo o que já existe
     (ex.: dados de pagamento). Não grava de novo se o texto já estiver lá.
@@ -243,6 +347,27 @@ def adicionar_observacao(numero, texto):
         return False
     novo = f"{atual}\n{texto.strip()}" if atual else texto.strip()
     chamar_tray("PUT", f"/orders/{numero}", json={"Order": {campo: novo}})
+    return True
+
+
+def atualizar_observacao_gerenciada(numero, partes):
+    """Atualiza apenas o bloco gerenciado pelo Assistente e preserva qualquer observação externa.
+
+    A segunda leitura evita sobrescrever uma edição feita por outra pessoa entre o GET e o PUT.
+    Depois do PUT, a releitura precisa confirmar exatamente o HTML salvo.
+    """
+    from notas_compras import atualizar_html
+
+    campo = campo_observacao()
+    atual = obter_pedido(numero).get(campo) or ""
+    novo = atualizar_html(atual, partes)
+    if novo == atual:
+        return False
+    if (obter_pedido(numero).get(campo) or "") != atual:
+        raise RuntimeError("Observação mudou; releia antes de atualizar.")
+    chamar_tray("PUT", f"/orders/{numero}", json={"Order": {campo: novo}})
+    if (obter_pedido(numero).get(campo) or "") != novo:
+        raise RuntimeError("Releitura da observação divergente; reconciliar sem recriar OC.")
     return True
 
 
