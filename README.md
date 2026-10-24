@@ -7,7 +7,10 @@ do pedido que chega pela **Tray** às ordens de compra no **Bling**, aos cards d
 > **Projeto de portfólio.** Todos os dados deste repositório são fictícios. A versão de demonstração não
 > acessa nenhuma plataforma: Bling, Trello, Tray e WhatsApp são simulados dentro do programa.
 
+
 📄 **Explicação visual dos processos:** [abrir a página](https://nagurnhak.github.io/assistente_do_vendedor/)
+
+
 
 <img src="docs/exemplos/tela_compras.png" alt="Tela de compras com os pedidos da Tray em cards" width="900">
 
