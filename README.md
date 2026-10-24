@@ -12,7 +12,7 @@ do pedido que chega pela **Tray** às ordens de compra no **Bling**, aos cards d
 
 
 
-<img src="docs/exemplos/tela_compras.png" alt="Tela de compras com os pedidos da Tray em cards" width="900">
+<img src="docs/exemplos/demo_1002.gif" alt="Demonstração: o pedido 1002 processado do começo ao fim, até os cards criados no Trello" width="900">
 
 ---
 
