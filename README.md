@@ -65,6 +65,8 @@ Regras de negócio que o código aplica:
 Pedidos de exemplo: **1001** (em estoque, frete local), **1002** (mesa estruturada + cadeiras, frete pela tabela)
 e **1003** (personalização, destino sem tabela). A lista de separação já começa com dois cards fictícios,
 para mostrar a medição de cards parados e os lembretes à logística.
+Ao terminar um pedido, a demonstração abre a janela **Cards criados**, com os cards como ficariam no
+Trello (lista, data, checklist e a ficha anexada); o botão **Ver cards criados** reabre a janela.
 
 **Pelo código:**
 

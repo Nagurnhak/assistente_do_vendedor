@@ -679,6 +679,70 @@ class TelaMensagens(ctk.CTkFrame):
             self.mostrar_mensagens([])
 
 
+class JanelaCardsDemo(ctk.CTkToplevel):
+    """Demonstração: mostra os cards que o pedido "criou" no Trello simulado, como ficariam no quadro:
+    lista, título, data, checklist de separação e a ficha anexada (clique na ficha para abrir em tamanho real)."""
+
+    LARGURA_FICHA = 470
+
+    def __init__(self, master, cards):
+        super().__init__(master)
+        self.title("Cards criados no Trello (demonstração)")
+        self.geometry("1080x820")
+        self.attributes("-topmost", True)
+        self.after(400, lambda: self.attributes("-topmost", False))  # aparece na frente, depois se comporta normal
+        self._imagens = []  # mantém as imagens vivas enquanto a janela estiver aberta
+        ctk.CTkLabel(self, text="Cards criados no Trello", font=fonte(20, True), anchor="w").pack(
+            fill="x", padx=24, pady=(18, 0))
+        ctk.CTkLabel(self, text="Simulação: é assim que os cards aparecem no quadro. Nada foi enviado ao Trello.",
+                     font=fonte(13), text_color=SUAVE, anchor="w").pack(fill="x", padx=24, pady=(2, 10))
+        area = ctk.CTkScrollableFrame(self, fg_color="transparent", orientation="horizontal" if len(cards) > 2 else "vertical")
+        area.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        if not cards:
+            ctk.CTkLabel(area, text="Nenhum card criado ainda: processe um pedido (ex.: 1002).", font=fonte(14)).pack(
+                anchor="w", padx=8, pady=8)
+            return
+        for coluna, card in enumerate(cards):
+            self._card(area, card).grid(row=0, column=coluna, sticky="n", padx=8, pady=4)
+
+    def _card(self, master, card):
+        import demo
+        caixa = ctk.CTkFrame(master, fg_color=CARTAO, corner_radius=14, border_width=1, border_color=BORDA,
+                             width=self.LARGURA_FICHA + 40)
+        ctk.CTkLabel(caixa, text=f"Lista: {card['lista']}", font=fonte(12, True), text_color=DESTAQUE, anchor="w").pack(
+            fill="x", padx=18, pady=(14, 2))
+        ctk.CTkLabel(caixa, text=card["nome"], font=fonte(15, True), wraplength=self.LARGURA_FICHA, justify="left",
+                     anchor="w").pack(fill="x", padx=18)
+        if card.get("prazo"):
+            dia = datetime.strptime(card["prazo"], "%Y-%m-%d").strftime("%d/%m/%Y")
+            ctk.CTkLabel(caixa, text=f"📅  Data de entrega: {dia}", font=fonte(13), anchor="w").pack(
+                fill="x", padx=18, pady=(6, 0))
+        for checklist in card.get("checklists") or []:
+            itens = checklist.get("checkItems") or []
+            ctk.CTkLabel(caixa, text=f"☑  Checklist de separação (0/{len(itens)})", font=fonte(13, True),
+                         anchor="w").pack(fill="x", padx=18, pady=(10, 2))
+            for item in itens:
+                ctk.CTkLabel(caixa, text=f"☐  {item['name']}", font=fonte(12), wraplength=self.LARGURA_FICHA,
+                             justify="left", anchor="w").pack(fill="x", padx=26)
+        for nome, conteudo in (card.get("imagens") or {}).items():
+            ctk.CTkLabel(caixa, text=f"📎  {nome}", font=fonte(13, True), anchor="w").pack(fill="x", padx=18, pady=(12, 4))
+            try:
+                from io import BytesIO
+                from PIL import Image
+                imagem = Image.open(BytesIO(conteudo))
+                altura = int(imagem.height * self.LARGURA_FICHA / imagem.width)
+                foto = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(self.LARGURA_FICHA, altura))
+                self._imagens.append(foto)
+                caminho = os.path.join(demo.PASTA_DEMO, "fichas", nome)
+                botao = ctk.CTkButton(caixa, image=foto, text="", fg_color="transparent", hover_color=CARTAO_HOVER,
+                                      command=lambda c=caminho: os.startfile(c) if os.path.isfile(c) else None)
+                botao.pack(padx=12, pady=(0, 14))
+            except Exception as erro:
+                ctk.CTkLabel(caixa, text=f"(não consegui mostrar a ficha: {erro})", font=fonte(12),
+                             text_color=AMBAR).pack(fill="x", padx=18, pady=(0, 14))
+        return caixa
+
+
 class TelaCompras(ctk.CTkFrame):
     """Mostra só a pergunta da vez + o que o fluxo informou logo antes dela (produto em revisão,
     resumo da OC, avisos). O registro completo fica escondido atrás de um botão."""
@@ -703,6 +767,10 @@ class TelaCompras(ctk.CTkFrame):
                                             border_color=DESTAQUE, text_color=DESTAQUE, hover_color=CARTAO_HOVER,
                                             command=self.alternar_registro)
         self.botao_registro.pack(side="left", padx=10)
+        if fi.MODO_DEMO:  # na demonstração, dá para ver como os cards ficaram no Trello simulado
+            ctk.CTkButton(barra, text="🗂  Ver cards criados", height=40, width=180, font=fonte(13),
+                          fg_color="transparent", border_width=1, border_color=DESTAQUE, text_color=DESTAQUE,
+                          hover_color=CARTAO_HOVER, command=self.ver_cards_demo).pack(side="left")
 
         # --- cartão da pergunta atual ---
         self.cartao = ctk.CTkFrame(self, fg_color=CARTAO, corner_radius=16, border_width=1, border_color=BORDA)
@@ -987,6 +1055,9 @@ class TelaCompras(ctk.CTkFrame):
         self.pergunta.configure(text="Carregando...")
         if self.console.get("1.0", "end").strip():
             self.escrever("\n", contexto=False)
+        if fi.MODO_DEMO:
+            import demo
+            cards_antes = len(demo.CARDS)
 
         def fluxo():
             try:
@@ -1005,8 +1076,15 @@ class TelaCompras(ctk.CTkFrame):
             self.escrever("\n——— fim do pedido ———\n", "resposta", contexto=False)
             self.painel.pack(fill="both", expand=True, padx=36, pady=(0, 24), after=self.cartao)
             self.carregar_pedidos(forcar=True)  # o pedido processado muda de status e sai da lista
+            if fi.MODO_DEMO and len(demo.CARDS) > cards_antes:  # demonstração: já mostra os cards criados
+                self.ver_cards_demo(demo.CARDS[cards_antes:])
 
         self.app.em_segundo_plano(fluxo, terminou)
+
+    def ver_cards_demo(self, cards=None):
+        """Demonstração: janela com os cards criados (sem argumento: todos os desta sessão)."""
+        import demo
+        JanelaCardsDemo(self, demo.CARDS[demo._INICIAIS:] if cards is None else cards)
 
     def perguntar(self, pergunta):
         """Pergunta de texto livre: campo + Enviar (+ botão do valor padrão, se houver)."""
