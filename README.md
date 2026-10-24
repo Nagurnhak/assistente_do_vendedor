@@ -75,7 +75,7 @@ checklist de cada card em [`docs/exemplos/cards.md`](docs/exemplos/cards.md)):
 **Executável:** baixe o `Assistente_do_Vendedor_DEMO.exe` na aba *Releases* e abra.
 
 Se o Windows mostrar ‘O Windows protegeu o computador’, clique em Mais informações → Executar assim mesmo: o aviso aparece porque o executável não tem assinatura digital.
-```
+
 **Pelo código:**
 
 ```bash
