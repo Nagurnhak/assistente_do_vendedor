@@ -4,25 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Assistente do Vendedor</title>
-<meta name="description" content="Como o Assistente do Vendedor automatiza compras entre Tray, Bling e Trello.">
+<meta name="description" content="Como o Assistente do Vendedor automatiza compras, prazos e acompanhamento entre Tray, Bling, Trello e WhatsApp.">
 <style>
   :root {
     --fundo: #FBF7F3; --superficie: #FFFFFF; --superficie-2: #FFF1E6; --borda: #EADFD6;
     --texto: #2A2420; --suave: #6B625B; --destaque: #D9631E; --destaque-forte: #B8501A;
-    --verde: #1E7B4F; --cinza-botao: #6B7280; --sombra: 0 1px 2px rgba(60,40,20,.06), 0 8px 24px rgba(60,40,20,.06);
+    --verde: #1E7B4F; --vermelho: #B42318; --cinza-botao: #6B7280;
+    --sombra: 0 1px 2px rgba(60,40,20,.06), 0 8px 24px rgba(60,40,20,.06);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --fundo: #181512; --superficie: #221E1A; --superficie-2: #2E2721; --borda: #3A322B;
       --texto: #F1EAE3; --suave: #A89F98; --destaque: #F28C38; --destaque-forte: #F7A766;
-      --verde: #4CC38A; --cinza-botao: #4B5563; --sombra: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+      --verde: #4CC38A; --vermelho: #F97066; --cinza-botao: #4B5563;
+      --sombra: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
     }
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; background: var(--fundo); color: var(--texto); line-height: 1.6;
+  body { margin: 0; background: var(--fundo); color: var(--texto);
          font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif; }
   a { color: var(--destaque); }
+  img { max-width: 100%; height: auto; display: block; }
   .container { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
   section { padding: 56px 0; border-top: 1px solid var(--borda); }
   h1, h2, h3 { line-height: 1.2; margin: 0 0 12px; }
@@ -34,18 +37,19 @@
   .grade { display: grid; gap: 16px; }
   @media (min-width: 720px) { .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } }
   .cartao { background: var(--superficie); border: 1px solid var(--borda); border-radius: 16px; padding: 22px;
-            box-shadow: var(--sombra); }
+            box-shadow: var(--sombra); min-width: 0; }
   .cartao p { margin: 6px 0 0; }
   code, .mono { font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; font-size: .92em; }
   code { background: var(--superficie-2); padding: 1px 6px; border-radius: 6px; }
+  .print { border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra); overflow: hidden; }
 
   /* topo */
   header { padding: 56px 0 48px; }
   .marca { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
   .logo { width: 44px; height: 44px; border-radius: 12px; background: var(--destaque); color: #fff;
           display: grid; place-items: center; font-weight: 800; font-size: 24px; }
-  header h1 { font-size: clamp(32px, 6vw, 52px); max-width: 16ch; }
-  header p.lead { font-size: 19px; max-width: 60ch; color: var(--suave); margin: 0 0 24px; }
+  header h1 { font-size: clamp(32px, 6vw, 52px); max-width: 18ch; }
+  header p.lead { font-size: 19px; max-width: 62ch; color: var(--suave); margin: 0 0 24px; }
   .selos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
   .selo { border: 1px solid var(--borda); background: var(--superficie); border-radius: 999px; padding: 4px 12px;
           font-size: 14px; }
@@ -54,8 +58,11 @@
   .botao.cheio { background: var(--destaque); color: #fff; }
   .botao.cheio:hover { background: var(--destaque-forte); }
   .botao.contorno { border: 1px solid var(--destaque); color: var(--destaque); }
-  .aviso { margin-top: 24px; padding: 12px 16px; border-radius: 10px; background: var(--superficie-2);
+  .aviso { margin: 24px 0 32px; padding: 12px 16px; border-radius: 10px; background: var(--superficie-2);
            color: var(--destaque-forte); font-weight: 600; font-size: 15px; }
+
+  /* números */
+  .numero { font-size: 44px; font-weight: 800; color: var(--destaque); line-height: 1.1; }
 
   /* antes x depois */
   .lista-x, .lista-v { list-style: none; padding: 0; margin: 12px 0 0; }
@@ -66,9 +73,10 @@
 
   /* fluxo */
   .fluxo { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; counter-reset: passo; }
-  @media (min-width: 900px) { .fluxo { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 720px) { .fluxo { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1000px) { .fluxo { grid-template-columns: repeat(4, 1fr); } }
   .fluxo li { counter-increment: passo; background: var(--superficie); border: 1px solid var(--borda);
-              border-radius: 16px; padding: 20px 20px 18px 64px; position: relative; box-shadow: var(--sombra); }
+              border-radius: 16px; padding: 64px 18px 18px; position: relative; box-shadow: var(--sombra); }
   .fluxo li::before { content: counter(passo); position: absolute; left: 18px; top: 18px; width: 32px; height: 32px;
                       border-radius: 50%; background: var(--destaque); color: #fff; font-weight: 800;
                       display: grid; place-items: center; }
@@ -85,26 +93,20 @@
   .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
          background: var(--superficie-2); color: var(--destaque-forte); white-space: nowrap; }
 
-  /* maquete do painel */
-  .janela { background: var(--superficie); border: 1px solid var(--borda); border-radius: 16px; overflow: hidden;
-            box-shadow: var(--sombra); }
-  .janela .barra { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--borda); background: var(--fundo); }
-  .janela .barra span { width: 10px; height: 10px; border-radius: 50%; background: var(--borda); }
-  .janela .corpo { padding: 20px; }
-  .contexto { background: var(--superficie-2); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--suave); }
-  .pergunta { font-size: 20px; font-weight: 700; margin: 16px 0 12px; }
-  .opcoes { display: grid; gap: 8px; }
-  @media (min-width: 640px) { .opcoes { grid-template-columns: repeat(3, 1fr); } }
-  .opcao { border-radius: 8px; padding: 12px; text-align: center; color: #fff; font-weight: 700; font-size: 14px;
-           background: var(--destaque); }
-  .opcao.neutra { background: var(--cinza-botao); }
+  /* linha do tempo dos prazos */
+  .linha-tempo { display: grid; gap: 10px; margin-top: 20px; }
+  @media (min-width: 720px) { .linha-tempo { grid-template-columns: repeat(4, 1fr); } }
+  .marco { border-left: 4px solid var(--destaque); background: var(--superficie); border-radius: 0 12px 12px 0;
+           padding: 12px 14px; box-shadow: var(--sombra); }
+  .marco.forte { border-color: var(--vermelho); }
+  .marco strong { display: block; font-size: 17px; }
+  .marco span { font-size: 14px; color: var(--suave); }
 
   /* arquitetura */
   .modulos { display: grid; gap: 10px; }
   @media (min-width: 720px) { .modulos { grid-template-columns: repeat(2, 1fr); } }
-  .modulo { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border: 1px solid var(--borda);
-            border-radius: 12px; background: var(--superficie); }
-  .modulo .arquivo { font-family: Consolas, ui-monospace, monospace; font-weight: 700; color: var(--destaque); min-width: 0; }
+  .modulo { padding: 14px; border: 1px solid var(--borda); border-radius: 12px; background: var(--superficie); }
+  .modulo .arquivo { font-family: Consolas, ui-monospace, monospace; font-weight: 700; color: var(--destaque); }
   .modulo p { margin: 2px 0 0; font-size: 14px; color: var(--suave); }
 
   footer { padding: 32px 0 48px; border-top: 1px solid var(--borda); color: var(--suave); font-size: 14px; }
@@ -115,46 +117,63 @@
 <header>
   <div class="container">
     <div class="marca"><div class="logo">A</div><strong>Assistente do Vendedor</strong></div>
-    <h1>Do pedido à ordem de compra, sem retrabalho.</h1>
-    <p class="lead">Um aplicativo de desktop que liga a loja virtual (Tray), o ERP (Bling) e o quadro de
-      produção (Trello): lê o pedido, descobre o fornecedor de cada peça, emite as ordens de compra, abre os
-      cards da fábrica e da logística e atualiza o status — perguntando ao vendedor só o que exige decisão.</p>
+    <h1>Do pedido à entrega, sem retrabalho.</h1>
+    <p class="lead">Um aplicativo de desktop que liga a loja virtual (Tray), o ERP (Bling), o quadro de produção
+      (Trello) e o WhatsApp: calcula os prazos pelo frete real, emite as ordens de compra, abre os cards da fábrica
+      e da logística com fichas prontas e acompanha cada pedido até o embarque, perguntando ao vendedor só o que
+      exige decisão.</p>
     <div class="selos">
-      <span class="selo">Python</span><span class="selo">customtkinter</span><span class="selo">API Bling v3</span>
-      <span class="selo">API Trello</span><span class="selo">API Tray</span><span class="selo">PyInstaller</span>
+      <span class="selo">Python</span><span class="selo">customtkinter</span><span class="selo">Pillow</span>
+      <span class="selo">Playwright</span><span class="selo">API Bling v3</span><span class="selo">API Trello</span>
+      <span class="selo">API Tray</span><span class="selo">PyInstaller</span>
     </div>
     <div class="botoes">
       <a class="botao cheio" href="#testar">Testar a demonstração</a>
       <a class="botao contorno" href="#fluxo">Ver o fluxo</a>
+      <a class="botao contorno" href="#cards">Ver os cards</a>
     </div>
     <p class="aviso">Projeto de portfólio: todos os dados aqui são fictícios. A demonstração simula as
-      três plataformas e não se conecta a nenhuma loja.</p>
+      plataformas e não se conecta a nenhuma loja.</p>
+    <img class="print" src="exemplos/tela_compras.png" alt="Tela de compras: pedidos da Tray em cards, prontos para processar">
   </div>
 </header>
 
 <section>
   <div class="container">
+    <span class="rotulo">O resultado</span>
+    <h2>Menos tempo em tarefa repetida</h2>
+    <div class="grade g2" style="margin-top:20px">
+      <div class="cartao"><div class="numero">−80%</div><p>de tempo gasto com compras, medido em 1 semana de uso pelos vendedores.</p></div>
+      <div class="cartao"><div class="numero">5 min → 30 s</div><p>por pedido, esperado com a integração da Tray (10 vezes mais rápido).</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
     <span class="rotulo">O problema</span>
-    <h2>Cada venda passava por três sistemas, à mão</h2>
+    <h2>Cada venda passava por quatro ferramentas, à mão</h2>
     <div class="grade g2" style="margin-top:20px">
       <div class="cartao">
         <h3>Antes</h3>
         <ul class="lista-x">
           <li>Procurar o pedido no ERP e conferir item por item</li>
-          <li>Descobrir o fornecedor de cada peça — inclusive das partes de produtos montados</li>
+          <li>Descobrir o fornecedor de cada peça, inclusive das partes de produtos montados</li>
+          <li>Calcular prazos de cabeça, sem considerar o frete até o cliente</li>
           <li>Digitar uma ordem de compra por fornecedor, copiando observações</li>
-          <li>Abrir cards no Trello, colar prints e calcular prazos</li>
-          <li>Lembrar de mudar o status no ERP e na loja virtual</li>
+          <li>Abrir cards no Trello e colar prints do pedido e da OC</li>
+          <li>Lembrar de cobrar fornecedores e logística perto do prazo</li>
         </ul>
       </div>
       <div class="cartao">
         <h3>Com o assistente</h3>
         <ul class="lista-v">
-          <li>Digita o número do pedido; o resto é puxado do Bling</li>
+          <li>Os pedidos a comprar já aparecem na tela, com alerta de espera</li>
           <li>Produtos estruturados viram componentes, cada um com seu fornecedor</li>
-          <li>Uma OC por fornecedor, já com as observações certas</li>
-          <li>Cards de logística e fábrica com print, descrição e prazo calculado</li>
-          <li>Status atualizado no Bling e na Tray ao final</li>
+          <li>Data máxima de embarque calculada pela tabela da transportadora</li>
+          <li>Uma OC por fornecedor, já com a data que ele precisa cumprir</li>
+          <li>Cards com fichas em imagem, checklist de separação e data certa</li>
+          <li>Lembretes do dia prontos para o WhatsApp</li>
         </ul>
       </div>
     </div>
@@ -165,24 +184,24 @@
   <div class="container">
     <span class="rotulo">Fluxo de compras</span>
     <h2>O que acontece quando o vendedor processa um pedido</h2>
-    <p class="suave">Cada passo é uma pergunta na tela — com botões quando há opções fixas — e só segue depois da confirmação.</p>
+    <p class="suave">Cada passo é uma pergunta na tela, com botões quando há opções fixas, e só segue depois da confirmação.</p>
     <ol class="fluxo">
+      <li><span class="sistema">Tray</span><h3>Pedidos a comprar</h3>
+        <p>A tela abre com os pedidos que esperam compra, em cards; quem espera há mais de 1 dia útil fica em vermelho.</p></li>
       <li><span class="sistema">Tray → Bling</span><h3>Encontra o pedido</h3>
-        <p>Busca o pedido de venda no Bling pelo número da Tray e confere se é mesmo o mesmo número (o filtro da API pode falhar).</p></li>
+        <p>Busca a venda no Bling pelo número da Tray e confere se é mesmo o mesmo pedido.</p></li>
       <li><span class="sistema">Tray + tabelas</span><h3>Calcula os prazos</h3>
-        <p>Lê o endereço do cliente, consulta a tabela de frete da transportadora e calcula a data máxima de embarque e a data em que os fornecedores precisam entregar.</p></li>
+        <p>Frete até a cidade ou o CEP do cliente pela tabela da transportadora: data máxima de embarque e data dos fornecedores.</p></li>
       <li><span class="sistema">Bling</span><h3>Desmembra os produtos</h3>
         <p>Mesa = tampo + base: produtos estruturados viram componentes, cada um com fornecedor e custo do cadastro.</p></li>
-      <li><span class="sistema">Vendedor</span><h3>Personalização</h3>
-        <p>Para cada peça, pergunta se há personalização e o valor; personalizações vão sempre para a OC da fábrica.</p></li>
       <li><span class="sistema">Bling</span><h3>Ordens de compra</h3>
-        <p>Agrupa uma OC por fornecedor, já com a data que o fornecedor precisa cumprir, e cria a OC com observações só dos itens dela; depois confere fornecedor e número.</p></li>
+        <p>Uma OC por fornecedor, com personalizações na OC da fábrica; cada OC é relida e conferida depois de criada.</p></li>
       <li><span class="sistema">Trello</span><h3>Cards com fichas</h3>
-        <p>Card da logística na data máxima de embarque, com a ficha do pedido (fotos, OCs, prazos) e uma checklist de separação; um card por OC da fábrica, com a ficha da OC.</p></li>
-      <li><span class="sistema">Bling + Tray</span><h3>Status</h3>
-        <p>Com OC: “OC enviada” no Bling e “Aguardando fornecedor” na Tray. Tudo em estoque: “Em separação” nos dois. As OCs ficam anotadas nas observações do pedido.</p></li>
+        <p>Logística na data máxima de embarque, com ficha do pedido e checklist; fábrica com a ficha da OC.</p></li>
+      <li><span class="sistema">Bling + Tray</span><h3>Status e observações</h3>
+        <p>“OC enviada” no Bling e “Aguardando fornecedor” na Tray (ou “Em separação”), com as OCs anotadas no pedido.</p></li>
       <li><span class="sistema">WhatsApp</span><h3>Acompanhamento</h3>
-        <p>De hora em hora confere as OCs, atualiza as checklists e monta os lembretes do dia para fornecedores e logística.</p></li>
+        <p>De hora em hora confere as OCs, atualiza as checklists e monta os lembretes do dia.</p></li>
     </ol>
   </div>
 </section>
@@ -191,20 +210,20 @@
   <div class="container">
     <span class="rotulo">Exemplo</span>
     <h2>Como ficam os cards no Trello</h2>
-    <p class="suave">Gerados pela demonstração com o pedido fictício 1002 (<code>py docs/gerar_exemplos.py</code>). A ficha
-      anexada ao card substitui os prints manuais: tem fotos, OCs e prazos, sem CPF, e-mail ou valores.</p>
+    <p class="suave">Gerados pela demonstração com o pedido fictício 1002 (mesa estruturada + 4 cadeiras, tampo com
+      pintura personalizada). A ficha anexada substitui os prints manuais: tem fotos, OCs e prazos, sem CPF, e-mail ou valores.</p>
     <div class="grade g2" style="margin-top:20px">
       <div class="cartao">
         <span class="tag">Trello · Logística</span>
         <h3 style="margin-top:10px">Pedido 1002 - 1x Mesa de Jantar Aurora 1,60m (OC 5001, OC 5003), 4x Cadeira Lina - Cor: Grafite (OC 5002) - Rápida Standard</h3>
-        <p class="suave">Data do card: <strong>embarque máximo</strong> · checklist de separação com as 4 peças e a OC de cada uma</p>
-        <a href="exemplos/ficha_pedido_1002.png"><img src="exemplos/ficha_pedido_1002.png" alt="Ficha do pedido 1002 anexada ao card da logística" style="width:100%;border-radius:10px;margin-top:12px;border:1px solid #eadfd6"></a>
+        <p class="suave">Data do card: embarque máximo · checklist de separação com as 4 peças e a OC de cada uma</p>
+        <a href="exemplos/ficha_pedido_1002.png"><img class="print" style="margin-top:12px" src="exemplos/ficha_pedido_1002.png" alt="Ficha do pedido 1002 anexada ao card da logística"></a>
       </div>
       <div class="cartao">
         <span class="tag">Trello · Fábrica</span>
         <h3 style="margin-top:10px">OC 5003 (1002) - 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) - Personalização: pintura preta</h3>
-        <p class="suave">Data do card: data que a fábrica precisa entregar (embarque − 3 dias úteis de logística)</p>
-        <a href="exemplos/ficha_OC_5003.png"><img src="exemplos/ficha_OC_5003.png" alt="Ficha da OC 5003 anexada ao card da fábrica" style="width:100%;border-radius:10px;margin-top:12px;border:1px solid #eadfd6"></a>
+        <p class="suave">Data do card: quando a fábrica precisa entregar (embarque − 3 dias úteis de logística)</p>
+        <a href="exemplos/ficha_OC_5003.png"><img class="print" style="margin-top:12px" src="exemplos/ficha_OC_5003.png" alt="Ficha da OC 5003 anexada ao card da fábrica"></a>
       </div>
     </div>
   </div>
@@ -212,19 +231,23 @@
 
 <section>
   <div class="container">
-    <span class="rotulo">Exemplo</span>
-    <h2>Pedido 1002: uma mesa estruturada e quatro cadeiras</h2>
-    <p class="suave">Resultado real da demonstração com dados fictícios: cliente em Campinas/SP, 4 dias úteis de frete pela tabela, e o tampo com pintura personalizada.</p>
-    <div class="cartao rolagem" style="margin-top:16px">
+    <span class="rotulo">Prazos</span>
+    <h2>Pedido 1002: da compra à entrega</h2>
+    <p class="suave">Cliente em Campinas/SP, 19 dias úteis combinados e 4 dias úteis de frete pela tabela. Tudo em dias úteis,
+      descontando fins de semana e feriados.</p>
+    <div class="linha-tempo">
+      <div class="marco"><strong>Compra</strong><span>dia em que o pedido entrou</span></div>
+      <div class="marco"><strong>Fornecedores</strong><span>embarque − 3 dias úteis de logística: data das OCs e do card da fábrica</span></div>
+      <div class="marco forte"><strong>Embarque máximo</strong><span>entrega − 4 dias úteis de frete: data do card da logística</span></div>
+      <div class="marco"><strong>Entrega ao cliente</strong><span>compra + 19 dias úteis combinados</span></div>
+    </div>
+    <div class="cartao rolagem" style="margin-top:20px">
       <table class="tabela">
         <thead><tr><th>Criado</th><th>Para</th><th>Conteúdo</th></tr></thead>
         <tbody>
-          <tr><td><span class="tag">Prazos</span></td><td>Tabela de frete</td><td>Compra + 19 dias úteis combinados − 4 de frete = <strong>embarque máximo</strong>; − 3 de logística = data dos fornecedores</td></tr>
           <tr><td><span class="tag">OC 5001</span></td><td>Metalúrgica Aurora</td><td class="mono">Pedido Tray: 1002 | 1x Mesa de Jantar Aurora 1,60m (peça: Base Aurora Aço Preto)</td></tr>
           <tr><td><span class="tag">OC 5002</span></td><td>Estofados Horizonte</td><td class="mono">Pedido Tray: 1002 | 4x Cadeira Lina - Cor: Grafite</td></tr>
-          <tr><td><span class="tag">OC 5003</span></td><td>Fábrica própria</td><td class="mono">Pedido Tray: 1002 | 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) | PERSONALIZAÇÃO: 1x Mesa de Jantar Aurora 1,60m: pintura preta</td></tr>
-          <tr><td><span class="tag">Card</span></td><td>Trello · Logística</td><td class="mono">Pedido 1002 - 1x Mesa de Jantar Aurora 1,60m (OC 5001, OC 5003), 4x Cadeira Lina - Cor: Grafite (OC 5002) - Rápida Standard · ficha do pedido · checklist com 4 peças</td></tr>
-          <tr><td><span class="tag">Card</span></td><td>Trello · Fábrica</td><td class="mono">OC 5003 (1002) - 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) - Personalização: pintura preta · ficha da OC</td></tr>
+          <tr><td><span class="tag">OC 5003</span></td><td>Fábrica própria</td><td class="mono">Pedido Tray: 1002 | 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) | PERSONALIZAÇÃO: pintura preta</td></tr>
           <tr><td><span class="tag">Status</span></td><td>Bling · Tray</td><td>OC enviada · Aguardando fornecedor</td></tr>
         </tbody>
       </table>
@@ -234,45 +257,44 @@
 
 <section>
   <div class="container">
-    <span class="rotulo">Regras de negócio</span>
-    <h2>Decisões que o código toma sozinho</h2>
-    <div class="grade g3" style="margin-top:20px">
-      <div class="cartao"><h3>Uma OC por fornecedor</h3><p class="suave">Cada OC lista só os itens que ela compra; a da fábrica sempre mostra item + personalização.</p></div>
-      <div class="cartao"><h3>Prazo pelo frete real</h3><p class="suave">Embarque máximo = entrega combinada menos o frete da tabela até a cidade ou o CEP do cliente. Sem tabela, vale a folga antiga de 10 dias úteis.</p></div>
-      <div class="cartao"><h3>Dias úteis de verdade</h3><p class="suave">Pula fins de semana e feriados nacionais (inclusive Carnaval e Corpus Christi), mais os feriados locais do <code>config.json</code>.</p></div>
-      <div class="cartao"><h3>Atraso à vista</h3><p class="suave">Prazo estourado vira “ATRASADO” no título dos cards e nas fichas; cards parados há mais de 2 dias úteis sobem para o topo da lista.</p></div>
-      <div class="cartao"><h3>Lembretes no tempo certo</h3><p class="suave">Fornecedores: 14 e 7 dias úteis antes, no dia e cobrança diária. Logística: 2 dias úteis antes do embarque, no dia e em atraso.</p></div>
-      <div class="cartao"><h3>Nada pela metade</h3><p class="suave">Se uma etapa falha, o programa lista o que já foi criado para ninguém duplicar OC ou card.</p></div>
-      <div class="cartao"><h3>Números brasileiros</h3><p class="suave"><code>1.500,50</code>, <code>R$ 30,00</code> e <code>1.500</code> são entendidos corretamente.</p></div>
-      <div class="cartao"><h3>Observações sem perda</h3><p class="suave">Na Tray, o assistente só mexe no seu próprio bloco e relê o pedido antes de gravar: o que outras pessoas escreveram continua lá.</p></div>
+    <span class="rotulo">Acompanhamento</span>
+    <h2>Lembretes no tempo certo</h2>
+    <div class="grade g2" style="margin-top:20px">
+      <div class="cartao">
+        <h3>Fornecedores</h3>
+        <ul class="lista-v">
+          <li>14 dias úteis antes da data da OC: lembrete</li>
+          <li>7 dias úteis antes: confirmação do prazo</li>
+          <li>No dia: “a mercadoria já foi enviada?”</li>
+          <li>Em atraso: uma cobrança por dia útil, até a OC ser recebida</li>
+        </ul>
+      </div>
+      <div class="cartao">
+        <h3>Logística</h3>
+        <ul class="lista-v">
+          <li>2 dias úteis antes do embarque máximo: lembrete com o link do card</li>
+          <li>No dia: “o pedido já foi embarcado?”</li>
+          <li>Em atraso: uma cobrança por dia útil enquanto o card estiver na separação</li>
+          <li>Mostra quantas peças da checklist já foram confirmadas</li>
+        </ul>
+      </div>
     </div>
+    <p class="suave" style="margin-top:16px">Envio automático em horário comercial pelo WhatsApp Web, com limite diário, intervalo
+      entre mensagens, modo teste e histórico exportável para Excel. Cards parados há mais de 2 dias úteis sobem para o topo da lista.</p>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <span class="rotulo">Interface</span>
-    <h2>Uma pergunta por vez</h2>
-    <div class="grade g2" style="margin-top:20px; align-items:center">
-      <div class="janela" aria-label="Maquete do painel de compras">
-        <div class="barra"><span></span><span></span><span></span></div>
-        <div class="corpo">
-          <div class="contexto">Pedido encontrado no Bling: Nº 2<br>• MESA-AURORA - Mesa de Jantar Aurora 1,60m (qtd 1)<br>• CAD-LINA - Cadeira Lina Cor:Grafite (qtd 4)</div>
-          <div class="pergunta">Os produtos estão em estoque?</div>
-          <div class="opcoes">
-            <div class="opcao">Sim, tem em estoque</div><div class="opcao">Não, precisa comprar</div><div class="opcao neutra">Cancelar</div>
-          </div>
-        </div>
-      </div>
-      <div>
-        <ul class="lista-v">
-          <li>Escolhas viram botões; texto livre só para números, datas e nomes</li>
-          <li>Acima da pergunta, só o contexto necessário para responder</li>
-          <li>Valor sugerido em um clique (“Usar: 10”, “Pular”)</li>
-          <li>Registro completo escondido atrás de um botão</li>
-          <li>Também tem calculadora de descontos e gerador de HTML</li>
-        </ul>
-      </div>
+    <span class="rotulo">Decisões automáticas</span>
+    <h2>O que o código resolve sozinho</h2>
+    <div class="grade g3" style="margin-top:20px">
+      <div class="cartao"><h3>Uma OC por fornecedor</h3><p class="suave">Cada OC lista só os itens que ela compra; a da fábrica sempre mostra item + personalização.</p></div>
+      <div class="cartao"><h3>Prazo pelo frete real</h3><p class="suave">Tabelas por cidade ou faixa de CEP. Sem tabela, vale a folga antiga de 10 dias úteis.</p></div>
+      <div class="cartao"><h3>Dias úteis de verdade</h3><p class="suave">Feriados nacionais, Carnaval e Corpus Christi, mais os feriados locais do <code>config.json</code>.</p></div>
+      <div class="cartao"><h3>Atraso à vista</h3><p class="suave">Prazo estourado vira “ATRASADO” no título dos cards e nas fichas.</p></div>
+      <div class="cartao"><h3>Observações sem perda</h3><p class="suave">Na Tray, só mexe no próprio bloco e relê o pedido antes de gravar.</p></div>
+      <div class="cartao"><h3>Nada pela metade</h3><p class="suave">Se uma etapa falha, lista o que já foi criado para ninguém duplicar OC ou card.</p></div>
     </div>
   </div>
 </section>
@@ -282,15 +304,16 @@
     <span class="rotulo">Arquitetura</span>
     <h2>Módulos</h2>
     <div class="modulos" style="margin-top:20px">
-      <div class="modulo"><div><div class="arquivo">app.py</div><p>Janela: telas, botões e o painel que transforma <code>print</code>/<code>input</code> do fluxo em perguntas na tela.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">ferramentas_internas.py</div><p>Regras de negócio e fluxo de compras; também roda no terminal.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">BLING.py</div><p>OAuth2 do Bling, renovação automática de token, limite de requisições e novas tentativas.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">TRAY.py</div><p>Autenticação da Tray, limites de uso (por minuto e por dia), pedidos, observações e status.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">fichas.py</div><p>Desenha as fichas do pedido e da OC em PNG (Pillow), no lugar dos prints manuais.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">prazos_frete.py</div><p>Converte as planilhas das transportadoras em um JSON leve e calcula o frete até o cliente.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">WHATSAPP.py</div><p>Envio pelo WhatsApp Web com Playwright: horário comercial, limite diário, intervalo entre mensagens e modo teste.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">demo.py</div><p>Bling, Trello, Tray e WhatsApp simulados com uma loja fictícia, para testes e demonstração.</p></div></div>
-      <div class="modulo"><div><div class="arquivo">testes/</div><p>21 testes automáticos; os do fluxo rodam com a internet bloqueada.</p></div></div>
+      <div class="modulo"><div class="arquivo">app.py</div><p>Janela: telas, cards de pedidos e o painel que transforma <code>print</code>/<code>input</code> do fluxo em perguntas.</p></div>
+      <div class="modulo"><div class="arquivo">ferramentas_internas.py</div><p>Regras de negócio e fluxo de compras; também roda no terminal.</p></div>
+      <div class="modulo"><div class="arquivo">BLING.py</div><p>OAuth2 do Bling, renovação automática de token, limite de requisições e novas tentativas.</p></div>
+      <div class="modulo"><div class="arquivo">TRAY.py</div><p>Autenticação da Tray, limites de uso (por minuto e por dia), pedidos, observações e status.</p></div>
+      <div class="modulo"><div class="arquivo">fichas.py</div><p>Desenha as fichas do pedido e da OC em PNG, no lugar dos prints manuais.</p></div>
+      <div class="modulo"><div class="arquivo">prazos_frete.py</div><p>Converte as planilhas das transportadoras em um JSON leve e calcula o frete até o cliente.</p></div>
+      <div class="modulo"><div class="arquivo">WHATSAPP.py</div><p>Envio pelo WhatsApp Web com Playwright: horário comercial, limite diário e modo teste.</p></div>
+      <div class="modulo"><div class="arquivo">demo.py</div><p>Bling, Trello, Tray e WhatsApp simulados, com loja, clientes e fotos fictícios.</p></div>
+      <div class="modulo"><div class="arquivo">testes/</div><p>21 testes automáticos; os do fluxo rodam com a internet bloqueada.</p></div>
+      <div class="modulo"><div class="arquivo">notas_compras.py</div><p>Bloco gerenciado nas observações do pedido, preservando o resto do texto.</p></div>
     </div>
   </div>
 </section>
@@ -302,8 +325,8 @@
     <div class="grade g2" style="margin-top:20px">
       <div class="cartao"><h3>Credenciais fora do código</h3><p class="suave">Chaves ficam num <code>config.json</code> local, ignorado pelo Git. O repositório só tem o modelo com campos vazios.</p></div>
       <div class="cartao"><h3>Segredos fora das mensagens</h3><p class="suave">Token do Trello no cabeçalho (não na URL); a Tray mascara chaves e tokens em qualquer erro.</p></div>
-      <div class="cartao"><h3>Tokens sem corromper</h3><p class="suave">Gravação atômica: se o programa fechar no meio, o token anterior continua válido.</p></div>
-      <div class="cartao"><h3>Demonstração isolada</h3><p class="suave">O executável de demonstração é gerado sem os módulos de integração (Bling, Tray e WhatsApp): não tem como acessar uma loja real.</p></div>
+      <div class="cartao"><h3>Dados de trabalho no computador</h3><p class="suave">Pedidos acompanhados, mensagens, histórico e tabelas de frete ficam fora do Git; o WhatsApp começa em modo teste.</p></div>
+      <div class="cartao"><h3>Demonstração isolada</h3><p class="suave">O executável de demonstração é gerado sem os módulos de Bling, Tray e WhatsApp: não tem como acessar uma loja real.</p></div>
     </div>
   </div>
 </section>
@@ -316,8 +339,8 @@
       <div class="cartao">
         <h3>Executável (Windows)</h3>
         <p class="suave">Baixe <code>Assistente do Vendedor - DEMO.exe</code> na aba <em>Releases</em> do repositório e abra.
-          Use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada, frete pela tabela) ou <strong>1003</strong> (personalização).
-          Ao terminar, a janela <em>Cards criados</em> mostra os cards como ficariam no Trello. Veja também a tela <em>Mensagens</em> com os lembretes simulados.</p>
+          Use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada, frete pela tabela) ou
+          <strong>1003</strong> (personalização). Ao terminar, a janela <em>Cards criados</em> mostra os cards como ficariam no Trello.</p>
       </div>
       <div class="cartao">
         <h3>Pelo código</h3>
@@ -339,7 +362,7 @@
 </section>
 
 <footer>
-  <div class="container">Assistente do Vendedor · projeto de portfólio · dados fictícios</div>
+  <div class="container">Assistente do Vendedor · projeto de portfólio · dados fictícios · <a href="https://github.com/Nagurnhak/assistente_do_vendedor">código no GitHub</a></div>
 </footer>
 
 </body>

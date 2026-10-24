@@ -124,12 +124,12 @@ def _vendido(produto_id, quantidade, variacao=""):
     return {"ProductsSold": {"name": nome, "quantity": quantidade, "reference": p["codigo"], "ProductSoldImage": imagem}}
 
 
-def _pedido_tray(numero, cliente, endereco, vendidos, frete, pagamento, dias_entrega=30, nota=""):
+def _pedido_tray(numero, cliente, endereco, vendidos, frete, pagamento, total, dias_entrega=30, nota=""):
     rua, numero_rua, bairro, cidade, uf, cep = endereco
     return {
         "id": numero, "date": date.today().isoformat(), "status": "A Enviar",
         "estimated_delivery_date": (date.today() + timedelta(days=dias_entrega)).isoformat(),
-        "shipment": frete, "payment_method": pagamento, "customer_note": nota, "store_note": "",
+        "shipment": frete, "payment_method": pagamento, "customer_note": nota, "store_note": "", "total": total,
         "Customer": {"name": cliente, "cellphone": "(11) 90000-0000", "cnpj": "",
                      "CustomerAddresses": [{"CustomerAddress": {
                          "type_delivery": "1", "address": rua, "number": numero_rua, "neighborhood": bairro,
@@ -140,12 +140,12 @@ def _pedido_tray(numero, cliente, endereco, vendidos, frete, pagamento, dias_ent
 
 PEDIDOS_TRAY = {p["id"]: p for p in [
     _pedido_tray("1001", "Cliente Exemplo Um", ("Rua das Flores", "100", "Centro", "São Paulo", "SP", "01001000"),
-                 [_vendido(501, 2, "Grafite")], "Transportadora Rápida", "Pix"),
+                 [_vendido(501, 2, "Grafite")], "Transportadora Rápida", "Pix", "1290.00"),
     _pedido_tray("1002", "Cliente Exemplo Dois", ("Avenida Brasil", "2000", "Jardim", "Campinas", "SP", "13000000"),
-                 [_vendido(502, 1), _vendido(501, 4, "Grafite")], "Transportadora Rápida", "Cartão de crédito",
+                 [_vendido(502, 1), _vendido(501, 4, "Grafite")], "Transportadora Rápida", "Cartão de crédito", "6480.00",
                  nota="Entregar em horário comercial."),
     _pedido_tray("1003", "Cliente Exemplo Três", ("Rua do Porto", "5", "Centro", "Recife", "PE", "50000000"),
-                 [_vendido(505, 1, "Natural"), _vendido(506, 1)], "Retirada na loja", "Boleto"),
+                 [_vendido(505, 1, "Natural"), _vendido(506, 1)], "Retirada na loja", "Boleto", "2350.00"),
 ]}
 
 # O que a demonstração "criou" (fica só na memória enquanto o programa está aberto)
@@ -479,7 +479,7 @@ class _TrayFalsa:
     def pedidos_por_status(nomes_status):
         alvo = {n.lower() for n in nomes_status}
         return [{"numero": p["id"], "data": p["date"], "status": STATUS_TRAY.get(p["id"], p["status"]),
-                 "total": "0.00", "entrega": p["estimated_delivery_date"]}
+                 "total": p.get("total", "0.00"), "entrega": p["estimated_delivery_date"]}
                 for p in PEDIDOS_TRAY.values() if STATUS_TRAY.get(p["id"], p["status"]).lower() in alvo]
 
     @staticmethod

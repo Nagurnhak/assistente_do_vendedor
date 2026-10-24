@@ -1431,7 +1431,7 @@ class App(ctk.CTk):
         lateral.grid_propagate(False)
         marca = ctk.CTkFrame(lateral, fg_color="transparent")
         marca.pack(fill="x", padx=20, pady=(26, 30))
-        ctk.CTkLabel(marca, text="B", width=44, height=44, corner_radius=12, fg_color=DESTAQUE,
+        ctk.CTkLabel(marca, text="A", width=44, height=44, corner_radius=12, fg_color=DESTAQUE,
                      text_color="#FFFFFF", font=fonte(24, True)).pack(side="left")
         textos = ctk.CTkFrame(marca, fg_color="transparent")
         textos.pack(side="left", padx=12)
