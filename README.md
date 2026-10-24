@@ -39,6 +39,15 @@ do pedido. Era lento e fácil de errar.
 | **Calculadora de descontos** | Valores em 12x, 3x e à vista no Pix, aceitando o formato brasileiro (`1.500,50`). |
 | **Descrição em HTML** | Monta a observação padrão do pedido com os itens puxados do Bling e calcula as datas de embarque e entrega em dias úteis. |
 
+### Como ficam os cards no Trello
+
+Exemplo gerado pela demonstração com o pedido fictício 1002 (`py docs/gerar_exemplos.py`; os textos dos cards e
+a checklist estão em [`docs/exemplos/cards.md`](docs/exemplos/cards.md)). A ficha anexada substitui os prints manuais.
+
+| Card da logística: ficha do pedido | Card da fábrica: ficha da OC |
+|---|---|
+| <img src="docs/exemplos/ficha_pedido_1002.png" alt="Ficha do pedido" width="420"> | <img src="docs/exemplos/ficha_OC_5003.png" alt="Ficha da OC" width="420"> |
+
 Regras de negócio que o código aplica:
 - cada OC lista **só os itens que ela compra**; a OC da fábrica sempre mostra item + personalização;
 - prazos contados da **data da compra** em dias úteis, descontando feriados nacionais (e os extras do `config.json`):
@@ -87,6 +96,7 @@ src/
   configuracao.py           leitura do config.json
 testes/                     testes automáticos (unittest)
 docs/index.html             explicação visual dos processos
+docs/exemplos/              fichas e cards de exemplo (gerados por docs/gerar_exemplos.py)
 ```
 
 O fluxo usa `print()`/`input()`, então funciona no terminal e na janela: a janela troca essas duas funções

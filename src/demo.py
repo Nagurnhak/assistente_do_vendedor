@@ -15,6 +15,7 @@ para mostrar a medição da lista e os lembretes à Logística.
 """
 
 import copy
+import os
 import re
 import sys
 import tempfile
@@ -119,7 +120,8 @@ SITUACOES_VENDA = [
 def _vendido(produto_id, quantidade, variacao=""):
     p = PRODUTOS[produto_id]
     nome = p["nome"].split(" - ")[0] + (f"<br><strong>Cor</strong> {variacao}" if variacao else "")
-    return {"ProductsSold": {"name": nome, "quantity": quantidade, "reference": p["codigo"], "ProductSoldImage": []}}
+    imagem = [{"https": f"demo://{p['codigo']}"}]  # foto desenhada pela própria demonstração (foto())
+    return {"ProductsSold": {"name": nome, "quantity": quantidade, "reference": p["codigo"], "ProductSoldImage": imagem}}
 
 
 def _pedido_tray(numero, cliente, endereco, vendidos, frete, pagamento, dias_entrega=30, nota=""):
@@ -304,8 +306,16 @@ def criar_card(lista_id, nome_card, data_limite_iso=None, descricao=None):
 
 
 def anexar_imagem(card_id, conteudo_imagem, nome_arquivo):
-    _achar_card(card_id)["anexos"].append(nome_arquivo)
-    print(f"[demonstração] Trello: anexo '{nome_arquivo}' no {card_id} ({len(conteudo_imagem) // 1024} KB).")
+    """Guarda a ficha no card e salva uma cópia em PASTA_DEMO/fichas, para abrir e ver como ficou."""
+    card = _achar_card(card_id)
+    card["anexos"].append(nome_arquivo)
+    card.setdefault("imagens", {})[nome_arquivo] = conteudo_imagem
+    pasta = os.path.join(PASTA_DEMO, "fichas")
+    os.makedirs(pasta, exist_ok=True)
+    caminho = os.path.join(pasta, nome_arquivo)
+    with open(caminho, "wb") as f:
+        f.write(conteudo_imagem)
+    print(f"[demonstração] Trello: anexo '{nome_arquivo}' no card (cópia para ver: {caminho}).")
 
 
 def trello(metodo, caminho, params=None, data=None, **_):
@@ -368,9 +378,60 @@ def print_simulado():
     return b"\x89PNG demonstracao"
 
 
+# Fotos fictícias: desenhadas aqui mesmo (Pillow), nada é baixado. Cada produto tem o seu desenho.
+_FOTOS = {"CAD-LINA": "cadeira", "MESA-AURORA": "mesa", "TAMPO-AURORA": "mesa", "BASE-AURORA": "mesa",
+          "APARADOR-SOL": "aparador", "ESPELHO-80": "espelho"}
+_cache_fotos = {}
+
+
+def _desenho(tipo, lado=480):
+    from io import BytesIO
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (lado, lado), "#F4EFEA")
+    d = ImageDraw.Draw(img)
+    u = lado / 100  # desenho em uma grade de 100 x 100
+    r = lambda *c: [v * u for v in c]
+    d.ellipse(r(14, 84, 86, 92), fill="#E3D9CF")  # sombra no chão
+    madeira, escura, metal = "#B07A4A", "#8A5A33", "#2F2F33"
+    if tipo == "mesa":
+        d.rounded_rectangle(r(10, 34, 90, 42), radius=2 * u, fill=madeira)
+        d.rectangle(r(10, 40, 90, 42), fill=escura)
+        d.polygon([(46 * u, 42 * u), (54 * u, 42 * u), (52 * u, 80 * u), (48 * u, 80 * u)], fill=metal)
+        d.rounded_rectangle(r(32, 79, 68, 84), radius=2 * u, fill=metal)
+    elif tipo == "cadeira":
+        d.rounded_rectangle(r(30, 14, 70, 50), radius=8 * u, fill="#5B5E66")
+        d.rounded_rectangle(r(26, 48, 74, 58), radius=4 * u, fill="#4A4D55")
+        for x1, x2 in ((30, 26), (70, 74)):
+            d.line([(x1 * u, 57 * u), (x2 * u, 86 * u)], fill=metal, width=int(2.4 * u))
+        for x1, x2 in ((40, 38), (60, 62)):
+            d.line([(x1 * u, 57 * u), (x2 * u, 83 * u)], fill=metal, width=int(2 * u))
+    elif tipo == "aparador":
+        d.rounded_rectangle(r(8, 34, 92, 72), radius=2 * u, fill="#C9A57A")
+        for x in (8, 36, 64):
+            d.rectangle(r(x + 2, 38, x + 26, 68), outline="#A9845B", width=int(u))
+            d.ellipse(r(x + 13, 52, x + 15, 54), fill=escura)
+        for x in (14, 84):
+            d.rectangle(r(x, 72, x + 2, 86), fill=escura)
+    else:  # espelho redondo
+        d.ellipse(r(18, 10, 82, 74), fill="#C8A24A")
+        d.ellipse(r(22, 14, 78, 70), fill="#CFE3EA")
+        d.line([(34 * u, 30 * u), (46 * u, 22 * u)], fill="white", width=int(2 * u))
+        d.line([(36 * u, 38 * u), (54 * u, 25 * u)], fill="white", width=int(1.2 * u))
+    saida = BytesIO()
+    img.save(saida, format="PNG")
+    return saida.getvalue()
+
+
 def foto(url):
-    """Foto do produto: a demonstração não baixa nada (a ficha sai sem foto)."""
-    return None
+    """Foto do produto: na demonstração, um desenho fictício (None se o Pillow não estiver instalado)."""
+    codigo = str(url or "").replace("demo://", "")
+    if codigo not in _cache_fotos:
+        try:
+            _cache_fotos[codigo] = _desenho(_FOTOS.get(codigo, "mesa"))
+        except Exception:
+            _cache_fotos[codigo] = None
+    return _cache_fotos[codigo]
 
 
 # ---------------------------------------------------------------------------
@@ -496,4 +557,6 @@ def resumo():
         linhas.append(f"  Card [{card['lista']}] {card['nome']} | prazo {card['prazo'] or '-'}{anexos}")
     for numero, status in STATUS_TRAY.items():
         linhas.append(f"  Tray: pedido {numero} -> {status}")
+    if any(card.get("imagens") for card in novos):
+        linhas.append(f"  Fichas anexadas aos cards (abra para ver): {os.path.join(PASTA_DEMO, 'fichas')}")
     return "\n".join(linhas)
