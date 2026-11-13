@@ -22,14 +22,13 @@ import demo  # noqa: E402
 
 demo.ATRASO = 0
 RESPOSTAS = [
-    "1002", "2", "", "",                    # pedido, precisa comprar, transportadora e prazo sugeridos
+    "1002", "2", "",                        # pedido, precisa comprar, prazo sugerido
     "s", "s",                               # os dois itens precisam ser comprados
-    "n", "s", "pintura preta", "50", "n",   # personalização só no tampo
+    "pintura preta", "1", "1", "50",        # o produto de personalização: na mesa, pela fábrica, R$ 50
     "", "", "", "", "s",                    # OC da metalúrgica
     "", "", "", "", "s",                    # OC dos estofados
     "", "", "", "", "", "s",                # OC da fábrica
     "s", "s",                               # OCs enviadas pelo Bling
-    "s", "F", "", "",                       # HTML do pedido
     "n", "1", "s",                          # card da fábrica: não urgente, aba 1, confirma
 ]
 

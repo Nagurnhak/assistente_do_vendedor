@@ -310,8 +310,8 @@ def texto_personalizacoes(itens, separador="; "):
 
 
 def limpar_nome_tray(nome):
-    """'Almofada X (Ref. 1990_23818)<br><strong>Cor Assento</strong> Facto Metal Cobre'
-    -> 'Almofada X (Ref. 1990_23818) - Cor Assento: Facto Metal Cobre'."""
+    """'Almofada X (Ref. 501_77)<br><strong>Cor Assento</strong> Linho Cobre'
+    -> 'Almofada X (Ref. 501_77) - Cor Assento: Linho Cobre'."""
     texto = re.sub(r"(?i)<br\s*/?>", " | ", str(nome or ""))
     texto = re.sub(r"(?is)<(strong|b)>(.*?)</\1>\s*", r"\2: ", texto)
     texto = unescape(re.sub(r"<[^>]+>", "", texto))
@@ -382,9 +382,40 @@ def buscar_id_pedido_tray(numero_tray):
         dados = mesmo_numero(recentes)
     if not dados:
         return None
-    if len(dados) > 1:
-        print(f"Atenção: {len(dados)} pedidos com esse número da Tray, usando o primeiro.")
+    if len(dados) > 1:  # nunca escolhe sozinho: quem confere diz qual é
+        escolha = escolher(f"{len(dados)} pedidos do Bling com o número {numero_tray} da Tray. Qual é este?",
+                           [(str(n), f"Venda {p.get('numero')} (ID {p['id']})") for n, p in enumerate(dados, 1)]
+                           + [("0", "Nenhum: cancelar")])
+        return None if escolha == "0" else dados[int(escolha) - 1]["id"]
     return dados[0]["id"]
+
+
+def conferir_vinculo_tray(pedido, numero_tray):
+    """Como a venda do Bling prova que é o pedido da Tray: 'numero_da_loja' (número da loja igual),
+    'observacoes' (sem número da loja, mas 'Tray 1002' nas observações) ou None. Nunca pelo nome do cliente."""
+    numero = str(numero_tray).strip()
+    lojas = {str(pedido.get(c) or "").strip() for c in ("numeroLoja", "numeroPedidoDaLojaVirtual")} - {""}
+    if lojas:
+        return "numero_da_loja" if lojas == {numero} else None
+    padrao = rf"\btray\b\D{{0,12}}(?<!\d){re.escape(numero)}(?!\d)"
+    for campo in ("observacoes", "observacoesInternas"):
+        if re.search(padrao, sem_acento(pedido.get(campo) or "")):
+            return "observacoes"
+    return None
+
+
+def id_pedido_por_vinculo(numero_tray):
+    """Venda lançada sem o número da Tray (Loja = nenhuma): quem confere informa o ID da venda no Bling e o
+    Assistente só aceita se as observações citarem o pedido da Tray. Devolve o ID conferido ou None."""
+    texto = input(f"Não achei o número {numero_tray} da Tray no Bling. ID da venda no Bling (Enter cancela): ").strip()
+    if not texto.isdigit():
+        return None
+    pedido = chamar_bling("GET", f"/pedidos/vendas/{texto}").get("data", {}) or {}
+    if conferir_vinculo_tray(pedido, numero_tray) is None:
+        print(f"A venda {texto} do Bling não cita a Tray {numero_tray} (número da loja ou observações): não vinculei.")
+        return None
+    print(f"Vínculo conferido: venda {pedido.get('numero')} (ID {texto}) cita a Tray {numero_tray} nas observações.")
+    return int(texto)
 
 
 def mostrar_pedido(id_pedido):
@@ -570,32 +601,156 @@ def perguntar_o_que_comprar(pedido):
 
 
 # ---------------------------------------------------------------------------
-# COMPRA - FASE 2: PERSONALIZAÇÃO PRODUTO A PRODUTO
+# COMPRA - FASE 2: PERSONALIZAÇÃO PELOS PRODUTOS DE PERSONALIZAÇÃO DA TRAY
 # ---------------------------------------------------------------------------
+# O pedido só é personalizado se tiver um dos produtos de personalização da loja (config:
+# compras.produtos_personalizacao = {"referência": "tipo"}). Sem eles: nenhuma pergunta de personalização.
+# Com eles: o texto vem do próprio item da Tray e o Assistente pergunta em qual produto, QUEM FAZ (nossa fábrica,
+# o próprio fornecedor do produto ou outro contato do Bling, pesquisado pelo nome) e o custo.
+# A linha de personalização vai na OC de quem faz.
 
-def perguntar_personalizacoes(itens, mostrar_origem=True):
-    """Pergunta, para cada produto, se ele tem personalização (texto + valor por unidade).
-    Devolve True se algum produto tiver personalização."""
-    print("\n--- Personalização (produto a produto) ---")
-    for it in itens:
-        if mostrar_origem and it.get("comprar", True):
-            origem = it["fornecedor_nome"] or "SEM fornecedor cadastrado"
-            if e_fabrica(it["fornecedor_nome"]):
-                origem += " (fábrica)"
-            if it.get("kit"):
-                origem += f" | parte de: {it['kit']}"
-            print(f"\n  • {rotulo_item(it)}  [{origem}]")
+PRODUTOS_PERSONALIZACAO = {}  # {"código do produto": "tipo"}: config.json -> compras.produtos_personalizacao
+PERSONALIZADORES_PADRAO = []  # atalhos extras, só se configurados: compras.personalizadores (nome ou {"nome", "contato_id"})
+
+
+def _config_compras(chave, padrao):
+    try:
+        return (config().get("compras") or {}).get(chave) or padrao
+    except Exception:
+        return padrao
+
+
+def produtos_personalizacao():
+    return {str(k): v for k, v in _config_compras("produtos_personalizacao", PRODUTOS_PERSONALIZACAO).items()}
+
+
+def _referencia(item):
+    return str(item.get("codigo") or "").split("_")[0].strip()
+
+
+def e_item_personalizacao(item):
+    return (_referencia(item) in produtos_personalizacao()
+            or sem_acento(item.get("descricao", "")).startswith("personalizacao"))
+
+
+def texto_da_personalizacao(item):
+    """'PERSONALIZAÇÃO - Tapeçaria - Assentos na cor Grafite (Ref. 501)' -> 'Assentos na cor Grafite'."""
+    nome = re.sub(r"\s*\(Ref\.[^)]*\)", "", str(item.get("nome_tray") or item.get("descricao") or ""))
+    partes = [p.strip() for p in nome.split(" - ") if p.strip()]
+    return " - ".join(p for p in partes[2:] if sem_acento(p) != sem_acento(nome_loja()))
+
+
+def separar_personalizacoes(ctx):
+    """Tira do pedido os produtos de personalização (não são comprados): ficam em ctx['personalizacoes_pedido']."""
+    itens = ctx["pedido"].get("itens", [])
+    tipos = produtos_personalizacao()
+    ctx["personalizacoes_pedido"] = [
+        {"tipo": tipos.get(_referencia(i), "Personalização"), "texto": texto_da_personalizacao(i),
+         "quantidade": float(i.get("quantidade") or 1)}
+        for i in itens if e_item_personalizacao(i)]
+    ctx["pedido"]["itens"] = [i for i in itens if not e_item_personalizacao(i)]
+    if ctx["personalizacoes_pedido"]:
+        print("Pedido PERSONALIZADO: " + "; ".join(
+            f"{formatar_quantidade(p['quantidade'])}x {p['tipo']}" + (f": {p['texto']}" if p["texto"] else "")
+            for p in ctx["personalizacoes_pedido"]))
+    else:
+        print("Pedido sem produto de personalização: sem perguntas de personalização.")
+
+
+def contato_no_bling(nome):
+    """(id, nome) de um contato do Bling pesquisado pelo nome (pergunta se houver mais de um), ou None."""
+    try:
+        achados = chamar_bling("GET", "/contatos", params={"pesquisa": nome}).get("data", []) or []
+    except Exception as erro:
+        print(f"    Não consegui pesquisar '{nome}' no Bling ({erro}).")
+        return None
+    if not achados:
+        print(f"    Não achei '{nome}' nos contatos do Bling.")
+        return None
+    if len(achados) == 1:
+        return achados[0]["id"], achados[0].get("nome") or nome
+    escolha = escolher(f"Qual destes contatos é '{nome}'?",
+                       [(str(n), f"{c.get('nome')} (id {c.get('id')})") for n, c in enumerate(achados[:12], 1)]
+                       + [("0", "Nenhum destes")])
+    return None if escolha == "0" else (achados[int(escolha) - 1]["id"], achados[int(escolha) - 1].get("nome") or nome)
+
+
+def quem_personaliza(itens, alvo, tipo):
+    """Pergunta quem faz a personalização. Devolve (id, nome) do contato no Bling ou None (fica fora das OCs)."""
+    fornecedores = []
+    for it in itens:  # o próprio fornecedor do produto (ex.: tapeceiro ou marmoraria)
+        if it.get("origem_pedido") in alvo and it.get("fornecedor_id") and not e_fabrica(it.get("fornecedor_nome")):
+            if (it["fornecedor_id"], it["fornecedor_nome"]) not in fornecedores:
+                fornecedores.append((it["fornecedor_id"], it["fornecedor_nome"]))
+    personalizadores = [p if isinstance(p, dict) else {"nome": p}
+                        for p in _config_compras("personalizadores", PERSONALIZADORES_PADRAO)]
+    opcoes = [("1", "Nossa fábrica")]
+    opcoes += [(f"f{n}", f"{nome} (o fornecedor do produto faz)") for n, (_, nome) in enumerate(fornecedores, 1)]
+    opcoes += [(f"p{n}", f"{p['nome']} (personalizador)") for n, p in enumerate(personalizadores, 1)]
+    opcoes += [("o", "Outro fornecedor (pesquisar no Bling)")]
+    while True:
+        escolha = escolher(f"Quem faz a personalização de {tipo}?", opcoes)
+        if escolha == "0":
+            return None
+        if escolha == "1":
+            fabrica = localizar_fabrica()
+            if fabrica:
+                return fabrica
+        elif escolha.startswith("f"):
+            return fornecedores[int(escolha[1:]) - 1]
+        elif escolha.startswith("p"):
+            p = personalizadores[int(escolha[1:]) - 1]
+            achado = (int(p["contato_id"]), p["nome"]) if p.get("contato_id") else contato_no_bling(p["nome"])
+            if achado:
+                return achado
         else:
-            print(f"\n  • {rotulo_item(it)}  [em estoque]")
-        if not sim("    Esse produto tem personalização?"):
+            nome = input("    Nome do fornecedor no Bling: ").strip()
+            achado = contato_no_bling(nome) if nome else None
+            if achado:
+                return achado
+        print("    Escolha de novo.")
+
+
+def definir_personalizacoes(ctx, itens):
+    """Linhas de personalização das OCs, cada uma já com quem faz ([] se o pedido não for personalizado)."""
+    pers = ctx.get("personalizacoes_pedido") or []
+    if not pers:
+        return []
+    produtos = ctx["pedido"].get("itens", [])
+    linhas = []
+    print("\n--- Personalização (produtos de personalização do pedido) ---")
+    for p in pers:
+        print(f"\n  ★ {formatar_quantidade(p['quantidade'])}x {p['tipo']}: {p['texto'] or '(sem descrição na Tray)'}")
+        texto = p["texto"] or input("    Qual a personalização? ").strip() or p["tipo"]
+        if len(produtos) <= 1:
+            alvo = list(range(len(produtos)))
+        else:
+            escolha = escolher("Em qual produto é essa personalização?",
+                               [("0", "Todos os produtos do pedido")]
+                               + [(str(n), rotulo_item(i)) for n, i in enumerate(produtos, 1)])
+            alvo = list(range(len(produtos))) if escolha == "0" else [int(escolha) - 1]
+        quem = quem_personaliza(itens, alvo, p["tipo"])
+        if quem is None:
+            print("    Personalização sem responsável: fica fora das OCs.")
             continue
-        texto = input("    Qual a personalização? ").strip()
-        if not texto:
-            print("    Personalização vazia, ignorada.")
-            continue
-        it["personalizacao"] = texto
-        it["valor_personalizacao"] = ler_numero("    Valor da personalização POR UNIDADE (OC da fábrica)", 0.0)
-    return any(it["personalizacao"] for it in itens)
+        valor = ler_numero("    Valor da personalização POR UNIDADE (custo na OC)", 0.0)
+        nomes = ", ".join(re.sub(r"\s*\(Ref\.[^)]*\)", "", nome_da_loja(produtos[a])) for a in alvo)
+        linhas.append({
+            "produto_id": None, "codigo": "",
+            "descricao": f"*** PERSONALIZAÇÃO {p['tipo']}" + (f" - {nomes}" if nomes else "") + f": {texto} ***",
+            "quantidade": p["quantidade"], "valor": valor, "fornecedor_id": quem[0], "fornecedor_nome": quem[1],
+            "personalizacao_linha": True, "personalizacao_texto": f"{p['tipo']}: {texto}",
+            "produto_ref": nomes or p["tipo"], "nome_tray": nomes or None, "origem": None,
+            "origem_pedido": alvo[0] if len(alvo) == 1 else None,
+        })
+        print(f"    → vai na OC de {quem[1]}.")
+    return linhas
+
+
+def resumo_linhas_personalizacao(linhas):
+    return "; ".join(f"{formatar_quantidade(l['quantidade'])}x {l['produto_ref']}: {l['personalizacao_texto']} "
+                     f"({'nossa fábrica' if e_fabrica(l['fornecedor_nome']) else l['fornecedor_nome']})"
+                     for l in linhas)
 
 
 # ---------------------------------------------------------------------------
@@ -658,7 +813,7 @@ def linha_personalizacao(item, fab_id, fab_nome):
     }
 
 
-def montar_plano(itens, comprar_produtos=True):
+def montar_plano(itens, comprar_produtos=True, linhas_pers=None):
     """
     Agrupa tudo em OCs, uma por fornecedor.
     Com comprar_produtos=False (ramo estoque) os produtos NÃO são comprados:
@@ -666,9 +821,31 @@ def montar_plano(itens, comprar_produtos=True):
     A OC da FÁBRICA recebe:
       - os itens que a própria fábrica fornece (com a personalização logo abaixo de cada um);
       - a personalização dos itens que vêm de outros fornecedores.
+    linhas_pers: personalizações dos produtos de personalização da Tray, cada uma na OC de quem faz.
     Devolve lista de grupos: {"fornecedor_id", "fornecedor_nome", "itens", "fabrica"}.
     """
     grupos = {}
+
+    def grupo(fid, fnome):
+        if fid not in grupos:
+            grupos[fid] = {"fornecedor_id": fid, "fornecedor_nome": fnome, "itens": [],
+                           "fabrica": e_fabrica(fnome)}
+        return grupos[fid]
+
+    def com_personalizacoes():
+        for linha in linhas_pers or []:
+            g = grupo(linha["fornecedor_id"], linha["fornecedor_nome"])
+            alvo = linha.get("origem_pedido")
+            # logo depois do produto a que se refere, quando ele está na mesma OC
+            posicao = max((n + 1 for n, it in enumerate(g["itens"]) if alvo is not None
+                           and it.get("origem_pedido") == alvo and not it.get("personalizacao_linha")),
+                          default=len(g["itens"]))
+            g["itens"].insert(posicao, linha)
+        # Fábrica por último, para as OCs dos outros fornecedores saírem antes
+        return sorted(grupos.values(), key=lambda g: g["fabrica"])
+
+    if not comprar_produtos and linhas_pers is not None:
+        return com_personalizacoes()
     if not comprar_produtos:
         pers = [it for it in itens if it["personalizacao"]]
         if not pers:
@@ -700,12 +877,6 @@ def montar_plano(itens, comprar_produtos=True):
         if fabrica is None:
             print("Sem o contato da fábrica, as personalizações NÃO entrarão em nenhuma OC.")
 
-    def grupo(fid, fnome):
-        if fid not in grupos:
-            grupos[fid] = {"fornecedor_id": fid, "fornecedor_nome": fnome, "itens": [],
-                           "fabrica": e_fabrica(fnome)}
-        return grupos[fid]
-
     # Itens a comprar com fornecedor (fábrica: produto + personalização em sequência)
     for it in a_comprar:
         if not it["fornecedor_id"]:
@@ -722,8 +893,7 @@ def montar_plano(itens, comprar_produtos=True):
         for it in pers_externas:
             g["itens"].append(linha_personalizacao(it, *fabrica))
 
-    # Fábrica por último, para as OCs dos outros fornecedores saírem antes
-    return sorted(grupos.values(), key=lambda g: g["fabrica"])
+    return com_personalizacoes()
 
 
 # ---------------------------------------------------------------------------
@@ -1041,10 +1211,13 @@ def pedir_prazo_combinado(ctx=None, obrigatorio=False):
     usar_tray = data_tray is not None and dias_tray > 0
     if data_tray is not None and not usar_tray:
         print(f"A Tray não informou um prazo de entrega útil ({data_tray.strftime('%d/%m/%Y')}): informe o prazo.")
-    sugestao = (f"Enter = data da Tray, {data_tray.strftime('%d/%m/%Y')} = {dias_tray} dias úteis" if usar_tray
-                else ("" if obrigatorio else "Enter para pular"))
+    sugestao = "" if obrigatorio else "Enter para pular"
     while True:
-        texto = input(f"Prazo de entrega combinado (quantos dias úteis?{' ' + sugestao if sugestao else ''}): ").strip()
+        if usar_tray:  # o normal é o prazo da Tray: só digita se combinou outro
+            texto = input(f"Prazo da Tray: {dias_tray} dias úteis (entrega {data_tray.strftime('%d/%m/%Y')}). "
+                          "Combinou um prazo diferente? Digite os dias úteis, ou Enter para manter: ").strip()
+        else:
+            texto = input(f"Prazo de entrega combinado (quantos dias úteis?{' ' + sugestao if sugestao else ''}): ").strip()
         if not texto and usar_tray:
             texto = str(dias_tray)
             print(f"Usando a entrega prevista na Tray: {dias_tray} dias úteis.")
@@ -1108,8 +1281,29 @@ def transportadora_do_pedido(pedido):
     return nome
 
 
-def pedir_transportadora(pedido):
+RETIRADA_DEPOSITO = "Retirada no Depósito"
+
+
+def eh_retirada(texto):
+    """Forma de entrega de retirada pelo cliente (ex.: 'Retirada na Loja', 'Retirar no depósito')."""
+    return "retir" in sem_acento(str(texto or ""))
+
+
+def frete_da_tray(ctx):
+    """Forma de envio escolhida no pedido da Tray ('' se não der para ler)."""
+    if not ctx or not ctx.get("numero_tray") or not tray():
+        return ""
+    try:
+        return str((_pedido_tray_completo(ctx) or {}).get("shipment") or "").strip()
+    except Exception:
+        return ""
+
+
+def pedir_transportadora(pedido, ctx=None):
     sugerida = transportadora_do_pedido(pedido)
+    if eh_retirada(sugerida) or eh_retirada(frete_da_tray(ctx)):
+        print(f"Entrega: {RETIRADA_DEPOSITO} (o cliente retira; sem transportadora).")
+        return RETIRADA_DEPOSITO
     if not sugerida:
         print("O pedido não tem transportadora definida no Bling.")
         try:
@@ -1120,8 +1314,8 @@ def pedir_transportadora(pedido):
         if com_tabela:
             print(f"Com tabela de prazos: {com_tabela} (outra: vale a regra anterior de datas).")
         return input("Transportadora utilizada: ").strip()
-    digitada = input(f"Transportadora utilizada [Enter = {sugerida}]: ").strip()
-    return digitada or sugerida
+    print(f"Transportadora (do pedido no Bling): {sugerida}")
+    return sugerida
 
 
 # ---------------------------------------------------------------------------
@@ -1180,14 +1374,17 @@ def planejar_prazos(ctx):
     """Antes das OCs: transportadora, frete pela tabela até o destino e prazo combinado (Enter = data da Tray).
     Fica em ctx['prazos'] e vale para as OCs, o HTML, os cards e as fichas."""
     print("\n--- Prazos do pedido ---")
-    ctx["transportadora"] = pedir_transportadora(ctx["pedido"])
+    ctx["transportadora"] = pedir_transportadora(ctx["pedido"], ctx)
     ctx["data_compra"] = data_da_compra(ctx)
-    destino = destino_do_pedido(ctx) if tray() else {}
-    try:
-        import prazos_frete
-        frete = prazos_frete.prazo(ctx["transportadora"], **destino)
-    except Exception as erro:
-        frete = {"dias": None, "motivo": f"não consegui consultar a tabela ({erro})"}
+    if ctx["transportadora"] == RETIRADA_DEPOSITO:  # sem frete: a data de retirada é a própria entrega
+        frete = {"dias": 0, "transportadora": RETIRADA_DEPOSITO, "detalhe": f"{RETIRADA_DEPOSITO} (sem frete)"}
+    else:
+        destino = destino_do_pedido(ctx) if tray() else {}
+        try:
+            import prazos_frete
+            frete = prazos_frete.prazo(ctx["transportadora"], **destino)
+        except Exception as erro:
+            frete = {"dias": None, "motivo": f"não consegui consultar a tabela ({erro})"}
     ctx["frete"] = frete
     combinados = pedir_prazo_combinado(ctx, obrigatorio=True)
     p = ctx["prazos"] = calcular_prazos(ctx["data_compra"], combinados, frete.get("dias"))
@@ -1229,7 +1426,7 @@ def texto_itens_logistica(pedido, ocs, separador=", "):
 # CHECKLIST DE SEPARAÇÃO NO CARD DA LOGÍSTICA (atualizada pelo Assistente)
 # ---------------------------------------------------------------------------
 # Os itens ficam SEMPRE desmarcados: quem marca é a equipe. O Assistente só reescreve o texto
-# ao lado de cada peça: "Estoque", "OC 601 · GAL · prev. 25/10", "OC 601 · GAL · 2 dias de atraso",
+# ao lado de cada peça: "Estoque", "OC 601 · Metalúrgica · prev. 25/10", "OC 601 · Metalúrgica · 2 dias de atraso",
 # "OC 602 recebida". O vínculo item <-> OC fica no acompanhamento_trello.json (pasta do programa).
 
 ARQUIVO_ACOMPANHAMENTO = "acompanhamento_trello.json"
@@ -1456,11 +1653,10 @@ def atualizar_checklists(hoje=None):
 
 
 # ---------------------------------------------------------------------------
-# TEMPO NA LISTA "A SEPARAR" DA LOGÍSTICA
+# ORDEM DOS CARDS: POR DATA, O MAIS ATRASADO NO TOPO (A Separar da Logística e abas da Fábrica)
 # ---------------------------------------------------------------------------
-# Mede há quantos dias úteis cada card está na lista onde o Assistente cria os cards (lista_logistica_id,
-# "A Separar"). Os que passaram de DIAS_UTEIS_PARADO sobem para o topo, o mais antigo primeiro, para a
-# equipe adiantar. Os demais ficam na ordem em que estavam, abaixo deles.
+# Padrão desde 26/10: os cards ficam em ordem de data (due) - conforme as datas chegam, sobem - e os vencidos
+# levam a etiqueta vermelha 'Atrasado'. (Antes: subiam os parados há mais de DIAS_UTEIS_PARADO na lista.)
 
 DIAS_UTEIS_PARADO = 2
 _ACOES_ENTRADA = "createCard,updateCard:idList,copyCard,convertToCardFromCheckItem,moveCardToBoard"
@@ -1470,40 +1666,60 @@ def _data_trello(texto):
     return datetime.strptime(texto[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).astimezone().date()
 
 
-def entrada_na_lista(card_id, lista_id):
-    """Dia em que o card entrou na lista (criado nela ou movido para ela)."""
-    acoes = _trello("GET", f"/cards/{card_id}/actions", params={"filter": _ACOES_ENTRADA, "limit": 50})
-    for acao in acoes:  # do mais recente para o mais antigo
-        depois = ((acao.get("data") or {}).get("listAfter") or {}).get("id")
-        if acao.get("type") != "updateCard" or depois == lista_id:
-            return _data_trello(acao["date"])
-    # sem histórico: usa a data de criação do card (vem embutida no id do Trello)
-    return datetime.fromtimestamp(int(card_id[:8], 16)).date()
+def _atrasado(card, hoje):
+    return bool(card.get("due")) and not card.get("dueComplete") and _data_trello(card["due"]) < hoje
+
+
+def ordenar_lista_por_data(lista_id, aplicar=True, hoje=None, checklists=False):
+    """Põe os cards da lista em ordem de data (due): o mais atrasado no topo, depois os que vencem antes.
+    Sem data ou com a data concluída: ficam embaixo, na ordem em que estavam. Devolve os cards (com 'atrasado'
+    e 'dias_atraso') e quantos foram movidos."""
+    hoje = hoje or date.today()
+    params = {"fields": "name,pos,idLabels,due,dueComplete,idBoard"}
+    if checklists:
+        params["checklists"] = "all"
+    cards = _trello("GET", f"/lists/{lista_id}/cards", params=params)
+    for card in cards:
+        card["atrasado"] = _atrasado(card, hoje)
+        card["dias_atraso"] = dias_uteis_de_atraso(_data_trello(card["due"]), hoje) if card["atrasado"] else 0
+    com_data = sorted((c for c in cards if c.get("due") and not c.get("dueComplete")), key=lambda c: c["due"])
+    ids_com_data = {c["id"] for c in com_data}
+    desejada = com_data + [c for c in cards if c["id"] not in ids_com_data]
+    movidos = 0
+    if aplicar and [c["id"] for c in cards] != [c["id"] for c in desejada]:
+        for n, card in enumerate(desejada, 1):
+            if float(card.get("pos") or 0) != n * 16384.0:
+                _trello("PUT", f"/cards/{card['id']}", data={"pos": n * 16384})
+                movidos += 1
+    return cards, movidos
 
 
 def organizar_a_separar(aplicar=True, hoje=None, limite=DIAS_UTEIS_PARADO):
-    """Mede o tempo dos cards na lista A Separar e sobe para o topo os parados há mais de `limite` dias úteis.
-    Com aplicar=False só mostra o que faria. Devolve um resumo (dict)."""
+    """Padrão de todas as listas acompanhadas (A Separar da Logística e as abas da Fábrica): cards em ordem de
+    data, o mais atrasado no topo, com a etiqueta vermelha 'Atrasado'. Na A Separar também a etiqueta
+    'Responder checklist'. Com aplicar=False só mede. Devolve um resumo (dict) da A Separar + total das fábricas."""
     hoje = hoje or date.today()
     lista_id = config()["trello"]["lista_logistica_id"]
-    cards = _trello("GET", f"/lists/{lista_id}/cards", params={"fields": "name,pos,idLabels", "checklists": "all"})
-    for card in cards:
-        card["dias"] = dias_uteis_de_atraso(entrada_na_lista(card["id"], lista_id), hoje)
-    parados = sorted((c for c in cards if c["dias"] > limite), key=lambda c: -c["dias"])
-    ordem_desejada = [c["id"] for c in parados] + [c["id"] for c in cards if c["dias"] <= limite]
-    ja_ordenado = [c["id"] for c in cards] == ordem_desejada
-    movidos, etiquetados, desetiquetados = 0, 0, 0
-    if aplicar and not ja_ordenado:
-        for card in reversed(parados):  # o último a subir fica no topo: o mais antigo
-            _trello("PUT", f"/cards/{card['id']}", data={"pos": "top"})
-            movidos += 1
-    if aplicar:
-        try:  # a etiqueta é um extra: um erro nela não pode derrubar a medição nem a ordenação
-            etiquetados, desetiquetados = _etiquetar_parados(lista_id, cards, limite)
+    cards, movidos = ordenar_lista_por_data(lista_id, aplicar, hoje, checklists=True)
+    listas = {lista_id: cards}
+    fabrica = {"atrasados": 0, "movidos": 0, "erro": ""}
+    for _nome, id_fabrica in listas_fabrica().values():
+        try:
+            cards_fab, movidos_fab = ordenar_lista_por_data(id_fabrica, aplicar, hoje)
+            listas[id_fabrica] = cards_fab
+            fabrica["atrasados"] += sum(c["atrasado"] for c in cards_fab)
+            fabrica["movidos"] += movidos_fab
         except Exception as erro:
-            print(f"ATENÇÃO: não consegui atualizar a etiqueta de parados no Trello ({erro}).")
-    return {"total": len(cards), "parados": parados, "movidos": movidos, "ja_ordenado": ja_ordenado,
-            "mais_antigo": parados[0] if parados else None, "limite": limite,
+            fabrica["erro"] = str(erro)
+    etiquetados = desetiquetados = 0
+    if aplicar:
+        try:  # a etiqueta é um extra: um erro nela não pode derrubar a ordenação
+            etiquetados, desetiquetados = _etiquetar_listas(listas, lista_id)
+        except Exception as erro:
+            print(f"ATENÇÃO: não consegui atualizar as etiquetas no Trello ({erro}).")
+    atrasados = sorted((c for c in cards if c["atrasado"]), key=lambda c: -c["dias_atraso"])
+    return {"total": len(cards), "atrasados": atrasados, "movidos": movidos,
+            "mais_atrasado": atrasados[0] if atrasados else None, "fabrica": fabrica,
             "responder": [c for c in cards if precisa_responder_checklist(c)],
             "etiquetados": etiquetados, "desetiquetados": desetiquetados}
 
@@ -1529,32 +1745,44 @@ def precisa_responder_checklist(card, limite=None):
     return bool(itens) and not any(ci.get("state") == "complete" for ci in itens)
 
 
-def _etiquetar_parados(lista_id, cards_da_lista, limite):
-    """Etiquetas nos cards da lista A Separar:
-      - 'Parado há +N dias úteis' (vermelha): nos parados;
-      - 'Responder checklist' (amarela): em todo card com a checklist de separação sem nada marcado.
-    Tira as duas dos que deixaram de se encaixar e dos que saíram da lista. Devolve (postas, retiradas)."""
-    id_quadro = _trello("GET", f"/lists/{lista_id}", params={"fields": "idBoard"})["idBoard"]
-    existentes = _trello("GET", f"/boards/{id_quadro}/labels", params={"fields": "name,color", "limit": 1000})
-    regras = [
-        (_etiqueta(id_quadro, f"Parado há +{limite} dias úteis", "red", existentes), lambda c: c["dias"] > limite),
-        (_etiqueta(id_quadro, *ETIQUETA_RESPONDER, existentes), lambda c: precisa_responder_checklist(c, limite)),
-    ]
+ETIQUETA_ATRASADO = ("Atrasado", "red")
+
+
+def _etiquetar_listas(listas, lista_logistica):
+    """Etiquetas nos cards acompanhados ({id da lista: cards}):
+      - 'Atrasado' (vermelha): data vencida e não concluída, em todas as listas;
+      - 'Responder checklist' (amarela): só na A Separar, checklist de separação sem nada marcado.
+    Tira as etiquetas dos que deixaram de se encaixar e dos que saíram das listas, e a antiga 'Parado há...'.
+    Devolve (postas, retiradas)."""
     pos, tirou = 0, 0
-    for card in cards_da_lista:
-        for etiqueta, deve_ter in regras:
-            tem = etiqueta in (card.get("idLabels") or [])
-            if deve_ter(card) and not tem:
-                _trello("POST", f"/cards/{card['id']}/idLabels", data={"value": etiqueta})
-                pos += 1
-            elif not deve_ter(card) and tem:
-                _trello("DELETE", f"/cards/{card['id']}/idLabels/{etiqueta}")
-                tirou += 1
-    # cards que saíram da lista (ex.: foram para a transportadora) não ficam com essas etiquetas
-    nossas = {etiqueta for etiqueta, _ in regras}
-    for card in _trello("GET", f"/boards/{id_quadro}/cards", params={"fields": "idList,idLabels"}):
-        if card.get("idList") != lista_id:
-            for etiqueta in nossas & set(card.get("idLabels") or []):
+    por_quadro = {}
+    for lista_id, cards in listas.items():
+        if cards:
+            por_quadro.setdefault(cards[0]["idBoard"], {})[lista_id] = cards
+    for id_quadro, listas_do_quadro in por_quadro.items():
+        existentes = _trello("GET", f"/boards/{id_quadro}/labels", params={"fields": "name,color", "limit": 1000})
+        atrasado = _etiqueta(id_quadro, *ETIQUETA_ATRASADO, existentes)
+        responder = (_etiqueta(id_quadro, *ETIQUETA_RESPONDER, existentes)
+                     if lista_logistica in listas_do_quadro else None)
+        antigas = {e["id"] for e in existentes if str(e.get("name") or "").startswith("Parado há")}
+        for lista_id, cards in listas_do_quadro.items():
+            regras = [(atrasado, lambda c: c["atrasado"])]
+            if lista_id == lista_logistica:
+                regras.append((responder, precisa_responder_checklist))
+            for card in cards:
+                atuais = set(card.get("idLabels") or [])
+                for etiqueta, deve_ter in regras:
+                    if deve_ter(card) and etiqueta not in atuais:
+                        _trello("POST", f"/cards/{card['id']}/idLabels", data={"value": etiqueta})
+                        pos += 1
+                    elif not deve_ter(card) and etiqueta in atuais:
+                        _trello("DELETE", f"/cards/{card['id']}/idLabels/{etiqueta}")
+                        tirou += 1
+        # cards que saíram das listas (ex.: foram para a transportadora) não ficam com essas etiquetas
+        nossas = {atrasado} | ({responder} if responder else set()) | antigas
+        for card in _trello("GET", f"/boards/{id_quadro}/cards", params={"fields": "idList,idLabels"}):
+            fora = card.get("idList") not in listas_do_quadro
+            for etiqueta in (nossas if fora else antigas) & set(card.get("idLabels") or []):
                 _trello("DELETE", f"/cards/{card['id']}/idLabels/{etiqueta}")
                 tirou += 1
     return pos, tirou
@@ -1562,16 +1790,22 @@ def _etiquetar_parados(lista_id, cards_da_lista, limite):
 
 def resumo_a_separar(resultado):
     if not resultado["total"]:
-        return "A Separar: nenhum card."
-    texto = (f"A Separar: {resultado['total']} cards, {len(resultado['parados'])} parados há mais de "
-             f"{resultado['limite']} dias úteis")
-    if resultado["mais_antigo"]:
-        texto += f" (o mais antigo há {resultado['mais_antigo']['dias']} dias úteis)"
+        texto = "A Separar: nenhum card"
+    else:
+        texto = f"A Separar: {resultado['total']} cards, {len(resultado['atrasados'])} atrasados"
+        if resultado["mais_atrasado"]:
+            texto += f" (o mais atrasado há {resultado['mais_atrasado']['dias_atraso']} dias úteis, no topo)"
     if resultado.get("responder"):
         n = len(resultado["responder"])
         texto += f"; {n} {'precisa' if n == 1 else 'precisam'} responder a checklist"
-    if resultado["movidos"]:
-        texto += f"; {resultado['movidos']} subiram para o topo"
+    fabrica = resultado.get("fabrica") or {}
+    if fabrica.get("atrasados"):
+        texto += f"; Fábrica: {fabrica['atrasados']} atrasados"
+    if fabrica.get("erro"):
+        texto += f"; Fábrica: não consegui ordenar ({fabrica['erro']})"
+    movidos = resultado["movidos"] + fabrica.get("movidos", 0)
+    if movidos:
+        texto += f"; {movidos} cards reordenados por data"
     if resultado.get("etiquetados"):
         texto += f"; etiqueta posta em {resultado['etiquetados']}"
     if resultado.get("desetiquetados"):
@@ -1687,6 +1921,22 @@ def whatsapp_do_fornecedor(fornecedor_id):
     return _cache_whatsapp[chave]
 
 
+def _oc_da_fabrica(item):
+    """True se a OC do item é da nossa fábrica (pelo contato do Bling ou pelo nome)."""
+    fab_id = (config().get("fabrica") or {}).get("contato_id")
+    if fab_id and str(item.get("fornecedor_id")) == str(fab_id):
+        return True
+    nomes = (item.get("fornecedor_nome"), item.get("fornecedor"))
+    return any(e_fabrica(n) or sem_acento(n or "") in ("fabrica", sem_acento(nome_fabrica())) for n in nomes if n)
+
+
+def whatsapp_da_fabrica():
+    """Número da fábrica: whatsapp_fabrica no config.json, senão o do contato da fábrica no Bling."""
+    c = config()
+    manual = normalizar_whatsapp(c.get("whatsapp_fabrica")) if c.get("whatsapp_fabrica") else ""
+    return manual or whatsapp_do_fornecedor((c.get("fabrica") or {}).get("contato_id"))
+
+
 def mensagens_do_dia(hoje=None, buscar_whatsapp=True):
     """Mensagens a mandar hoje, uma por OC em aberto. Use depois de atualizar_checklists()
     (que tira do acompanhamento as OCs já recebidas)."""
@@ -1696,11 +1946,13 @@ def mensagens_do_dia(hoje=None, buscar_whatsapp=True):
     for registro in carregar_acompanhamento():
         por_oc = {}
         for item in registro.get("itens", []):
-            if item.get("oc_id") and not item.get("finalizado"):
+            if item.get("oc_id") and not item.get("finalizado") and not item.get("sem_cobranca"):
                 por_oc.setdefault(item["oc_id"], []).append(item)
         for oc_id, itens in por_oc.items():
             primeiro = itens[0]
-            if registro.get("regua_pela_oc"):  # pedidos com prazo pela tabela: o fornecedor entrega na data da OC
+            if primeiro.get("data_combinada"):  # data nova respondida pelo WhatsApp (aplicada na tela Respostas)
+                base = primeiro["data_combinada"]
+            elif registro.get("regua_pela_oc"):  # pedidos com prazo pela tabela: o fornecedor entrega na data da OC
                 base = primeiro.get("data_prevista") or registro.get("embarque")
             else:
                 base = registro.get("embarque") or primeiro.get("data_prevista")
@@ -1715,14 +1967,19 @@ def mensagens_do_dia(hoje=None, buscar_whatsapp=True):
             nomes = "; ".join(i.get("nome_fornecedor") or re.sub(r"^Personalização: ", "personalização ", i["nome"])
                               for i in itens)
             fornecedor = primeiro.get("fornecedor") or "fornecedor"
-            texto = MODELOS_MENSAGEM[etapa].format(loja=nome_loja(), 
+            fabrica = _oc_da_fabrica(primeiro)
+            texto = MODELOS_MENSAGEM[etapa].format(
+                loja=nome_loja(),
                 fornecedor=fornecedor, oc=primeiro.get("oc_numero"), pedido=registro.get("pedido"),
                 data=embarque.strftime("%d/%m/%Y"), itens=nomes,
                 atraso=f"{atraso} {'dia útil' if atraso == 1 else 'dias úteis'} de atraso")
+            texto += TEXTO_REFERENCIA.format(ref=f"#OC{primeiro.get('oc_numero')}")
             mensagens.append({
                 "oc_id": oc_id, "oc_numero": primeiro.get("oc_numero"), "pedido": registro.get("pedido"),
                 "fornecedor": fornecedor, "fornecedor_nome": primeiro.get("fornecedor_nome") or fornecedor,
-                "whatsapp": whatsapp_do_fornecedor(primeiro.get("fornecedor_id")) if buscar_whatsapp else "",
+                "whatsapp": ((whatsapp_da_fabrica() if fabrica else whatsapp_do_fornecedor(primeiro.get("fornecedor_id")))
+                             if buscar_whatsapp else ""),
+                "fabrica": fabrica,
                 "etapa": etapa, "rotulo": ROTULO_ETAPA[etapa], "embarque": embarque.isoformat(), "texto": texto,
                 "chave": etapa if etapa in ("14", "7") else f"{etapa}:{hoje.isoformat()}",
             })
@@ -1801,6 +2058,7 @@ def mensagens_logistica(hoje=None):
             separacao=_separacao_do_card(card),
             falta=f"falta {faltam} dia útil" if faltam == 1 else f"faltam {faltam} dias úteis",
             atraso=f"{atraso} {'dia útil' if atraso == 1 else 'dias úteis'} de atraso")
+        texto += TEXTO_REFERENCIA.format(ref=f"#P{pedido}")
         mensagens.append({
             "tipo": "logistica", "oc_id": chave_card, "oc_numero": None, "pedido": pedido,
             "fornecedor": "Logística", "fornecedor_nome": "Logística", "whatsapp": whatsapp,
@@ -1808,6 +2066,228 @@ def mensagens_logistica(hoje=None):
             "chave": etapa if etapa == "2" else f"{etapa}:{hoje.isoformat()}", "link": card.get("shortUrl"),
         })
     return mensagens
+
+
+# ---------------------------------------------------------------------------
+# RESPOSTAS DO WHATSAPP (Logística e Fábrica) -> nova data com 1 clique
+# ---------------------------------------------------------------------------
+# Cada mensagem leva uma referência (#P105473 = card do pedido na Logística; #OC10592 = OC). O Assistente lê as
+# conversas no WhatsApp Web dele (WHATSAPP.ler_respostas), liga cada resposta à referência citada (quem usa
+# "Responder" no WhatsApp cita a mensagem original) e sugere a data. Nada muda sem o clique de quem confere:
+#   - nova data no card da Logística -> due do card (a régua passa a cobrar por ela);
+#   - nova data da Fábrica -> data prevista da OC no Bling, due do card da Fábrica e a régua da OC;
+#   - "já embarcou" / "está pronto" -> conclui a data do card (para as cobranças daquele card/OC);
+#   - nos dois casos fica uma linha nas observações do pedido na Tray.
+
+ARQUIVO_RESPOSTAS = "respostas_whatsapp.json"
+REF_RESPOSTA = re.compile(r"#\s?(P|OC)\s?(\d{4,})", re.I)
+TEXTO_REFERENCIA = ("\n\nRef. {ref} - por favor, use \"Responder\" nesta mensagem com a nova data "
+                    "(ou avise se já está pronto/embarcado).")
+PALAVRAS_CONCLUIDO = ("embarcad", "embarcou", "ja foi", "foi enviad", "ja enviamos", "enviado", "saiu", "despachad",
+                      "entregue", "entregamos", "esta pronto", "ta pronto", "ja esta pronta", "finalizad", "coletad")
+DIAS_SEMANA = {"segunda": 0, "terca": 1, "quarta": 2, "quinta": 3, "sexta": 4, "sabado": 5, "domingo": 6}
+
+
+def _caminho_respostas():
+    from configuracao import pasta_base
+    return os.path.join(pasta_base(), ARQUIVO_RESPOSTAS)
+
+
+def carregar_respostas():
+    import json
+    try:
+        with open(_caminho_respostas(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return []
+
+
+def salvar_respostas(respostas):
+    import json
+    caminho = _caminho_respostas()
+    with open(caminho + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(respostas, f, ensure_ascii=False, indent=2)
+    os.replace(caminho + ".tmp", caminho)
+
+
+def sugerir_data(texto, hoje=None):
+    """Lê a resposta: ('data', date) com a data citada, ('concluido', None) se diz que já foi, ou (None, None)."""
+    hoje = hoje or date.today()
+    t = sem_acento(texto or "")
+    achado = re.search(r"\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b", t)
+    if achado:
+        dia, mes, ano = int(achado[1]), int(achado[2]), achado[3]
+        ano = (int(ano) + 2000 if len(ano) == 2 else int(ano)) if ano else hoje.year
+        try:
+            data = date(ano, mes, dia)
+            if not achado[3] and data < hoje - timedelta(days=60):  # "05/01" dito em dezembro = ano que vem
+                data = date(ano + 1, mes, dia)
+            return "data", data
+        except ValueError:
+            pass
+    achado = re.search(r"\bdia\s+(\d{1,2})\b", t)
+    if achado:
+        dia = int(achado[1])
+        for meses in (0, 1):
+            ano, mes = divmod(hoje.month - 1 + meses, 12)
+            try:
+                data = date(hoje.year + ano, mes + 1, dia)
+            except ValueError:
+                continue
+            if data >= hoje:
+                return "data", data
+    if re.search(r"\bdepois de amanha\b", t):
+        return "data", hoje + timedelta(days=2)
+    if re.search(r"\bamanha\b", t):
+        return "data", hoje + timedelta(days=1)
+    for nome, numero in DIAS_SEMANA.items():
+        if re.search(rf"\b{nome}(-feira)?\b", t):
+            return "data", hoje + timedelta(days=(numero - hoje.weekday() - 1) % 7 + 1)
+    if any(p in t for p in PALAVRAS_CONCLUIDO):
+        return "concluido", None
+    if re.search(r"\bhoje\b", t):
+        return "data", hoje
+    return None, None
+
+
+def numeros_para_ler(c):
+    """{número: 'Logística' / 'Fábrica'} das categorias com envio real. c: a configuração do WhatsApp (WHATSAPP.cfg()).
+    Recebida pronta para as regras não dependerem do módulo do WhatsApp."""
+    reais = c.get("envio_real") or [] if c["modo_teste"] else ["logistica", "fabrica"]
+    numeros = {}
+    if "logistica" in reais and normalizar_whatsapp(config().get("whatsapp_logistica")):
+        numeros[normalizar_whatsapp(config().get("whatsapp_logistica"))] = "Logística"
+    if "fabrica" in reais and whatsapp_da_fabrica():
+        numeros[whatsapp_da_fabrica()] = "Fábrica"
+    return numeros
+
+
+def registrar_respostas(lidas, desde=None):
+    """Guarda as respostas novas lidas no WhatsApp. lidas: [{id, numero, quem, quando, texto, completo}].
+    Devolve quantas são novas."""
+    respostas = carregar_respostas()
+    conhecidas = {r["id"] for r in respostas}
+    novas = 0
+    for r in lidas:
+        if r["id"] in conhecidas or not (r.get("texto") or "").strip():
+            continue
+        if desde and (r.get("quando") or "9999") < desde:
+            continue
+        refs = sorted({f"#{a.upper()}{b}" for a, b in REF_RESPOSTA.findall(r.get("completo") or "")})
+        if not refs:  # não marcou ("Responder") uma mensagem do Assistente: é outra conversa, ignora
+            continue
+        incerta = False
+        acao, data = sugerir_data(r["texto"])
+        respostas.append({**{k: r.get(k) for k in ("id", "numero", "quem", "quando", "texto")},
+                          "refs": refs, "ref_incerta": incerta, "sugestao": acao,
+                          "data_sugerida": data.isoformat() if data else None, "status": "nova",
+                          "lida_em": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        conhecidas.add(r["id"])
+        novas += 1
+    salvar_respostas(respostas)
+    return novas
+
+
+def _card_da_referencia(ref):
+    """(card, 'logistica'/'fabrica') do card do Trello da referência, ou (None, tipo)."""
+    tipo, numero = ("logistica", ref[2:]) if ref.upper().startswith("#P") else ("fabrica", ref[3:])
+    if tipo == "logistica":
+        listas = [config()["trello"]["lista_logistica_id"]]
+        padrao = re.compile(rf"\b{numero}\b")
+    else:
+        listas = [id_ for _, id_ in listas_fabrica().values()]
+        padrao = re.compile(rf"\bOC\s*{numero}\b", re.I)
+    for lista in listas:
+        for card in _trello("GET", f"/lists/{lista}/cards", params={"fields": "name,due,dueComplete,shortUrl"}):
+            if padrao.search(card.get("name") or ""):
+                return card, tipo
+    return None, tipo
+
+
+def _itens_da_oc(registros, oc_numero):
+    return [(r, i) for r in registros for i in r.get("itens", []) if str(i.get("oc_numero")) == str(oc_numero)]
+
+
+def _pedido_da_referencia(ref, registros):
+    if ref.upper().startswith("#P"):
+        return ref[2:]
+    pares = _itens_da_oc(registros, ref[3:])
+    return pares[0][0].get("pedido") if pares else None
+
+
+def mudar_data_prevista_oc(oc_id, nova):
+    """Muda só a data prevista da OC no Bling (relê a OC, devolve igual com a data nova e confere)."""
+    oc = chamar_bling("GET", f"/pedidos/compras/{oc_id}").get("data", {})
+    if (oc.get("situacao") or {}).get("valor") in (1, 2):
+        raise RuntimeError("a OC já está atendida/cancelada no Bling")
+    corpo = {k: v for k, v in oc.items() if k not in ("id", "numero", "situacao", "totalProdutos", "total", "tributacao")}
+    corpo["dataPrevista"] = nova.isoformat()
+    chamar_bling("PUT", f"/pedidos/compras/{oc_id}", json=corpo)
+    relida = chamar_bling("GET", f"/pedidos/compras/{oc_id}").get("data", {})
+    if (relida.get("dataPrevista") != nova.isoformat() or len(relida.get("itens") or []) != len(oc.get("itens") or [])
+            or relida.get("total") != oc.get("total")
+            or (relida.get("fornecedor") or {}).get("id") != (oc.get("fornecedor") or {}).get("id")):
+        raise RuntimeError("o Bling não confirmou a data nova com a OC igual; confira a OC no Bling")
+
+
+def aplicar_resposta(resposta_id, acao, nova_data=None, ref=None):
+    """acao: 'data' (nova_data: date), 'concluido' ou 'ignorar'. Devolve a lista do que foi feito."""
+    respostas = carregar_respostas()
+    resposta = next(r for r in respostas if r["id"] == resposta_id)
+    feito = []
+    if acao != "ignorar":
+        ref = ref or (resposta["refs"][0] if resposta.get("refs") else None)
+        if not ref:
+            raise RuntimeError("a resposta não tem a qual card/OC se refere")
+        registros = carregar_acompanhamento()
+        card, tipo = _card_da_referencia(ref)
+        pedido = _pedido_da_referencia(ref, registros)
+        hoje_txt = date.today().strftime("%d/%m")
+        if acao == "data":
+            if tipo == "logistica":
+                for r in registros:
+                    if str(r.get("pedido")) == str(pedido):
+                        r["embarque"] = nova_data.isoformat()
+            else:  # o Bling primeiro: se ele recusar, nada mais muda
+                pares = _itens_da_oc(registros, ref[3:])
+                for _, item in pares:
+                    item["data_combinada"] = nova_data.isoformat()
+                    item.pop("sem_cobranca", None)
+                oc_id = pares[0][1].get("oc_id") if pares else None
+                if oc_id:
+                    mudar_data_prevista_oc(oc_id, nova_data)
+                    feito.append(f"OC {ref[3:]} no Bling prevista para {nova_data:%d/%m/%Y}")
+            if card:
+                _trello("PUT", f"/cards/{card['id']}",
+                        data={"due": f"{nova_data.isoformat()}T12:00:00.000Z", "dueComplete": "false"})
+                feito.append(f"card {'da Logística' if tipo == 'logistica' else 'da Fábrica'} com data "
+                             f"{nova_data:%d/%m/%Y}")
+            nota = (f"Nova previsão ({'Logística' if tipo == 'logistica' else 'Fábrica, ' + ref[1:]}, "
+                    f"WhatsApp {hoje_txt}): {nova_data:%d/%m/%Y}")
+        else:  # concluido
+            if card:
+                _trello("PUT", f"/cards/{card['id']}", data={"dueComplete": "true"})
+                feito.append(f"card {'da Logística' if tipo == 'logistica' else 'da Fábrica'} concluído")
+            if tipo == "fabrica":
+                for _, item in _itens_da_oc(registros, ref[3:]):
+                    item["sem_cobranca"] = True
+            nota = (f"{'Logística: embarcado' if tipo == 'logistica' else 'Fábrica: ' + ref[1:] + ' pronta'} "
+                    f"(WhatsApp {hoje_txt})")
+        salvar_acompanhamento(registros)
+        if pedido:
+            try:
+                import TRAY
+                TRAY.adicionar_observacao(str(pedido), nota)
+                feito.append("observação na Tray")
+            except Exception as erro:
+                feito.append(f"Tray não atualizada ({erro})")
+        if not feito:
+            raise RuntimeError(f"não achei card nem OC da referência {ref}")
+    resposta.update({"status": "ignorada" if acao == "ignorar" else "aplicada", "acao": acao,
+                     "data_aplicada": nova_data.isoformat() if nova_data else None, "ref_aplicada": ref,
+                     "aplicada_em": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "feito": feito})
+    salvar_respostas(respostas)
+    return feito
 
 
 # ---- Histórico de envios (log permanente: uma linha JSON por envio, só cresce) ----
@@ -1863,12 +2343,6 @@ def exportar_historico_csv(caminho=None):
         for linha in carregar_historico():
             escritor.writerow([linha.get(chave, "") for chave, _ in colunas])
     return caminho
-
-
-def link_whatsapp(mensagem):
-    """Abre a conversa com o texto já escrito (a pessoa só aperta enviar)."""
-    from urllib.parse import quote
-    return f"https://wa.me/{mensagem['whatsapp']}?text={quote(mensagem['texto'])}"
 
 
 # ---------------------------------------------------------------------------
@@ -2082,7 +2556,7 @@ def enviar_trello(ctx, ocs):
     print("\n--- Trello: Logística ---")
     itens_pedido = texto_itens_logistica(ctx["pedido"], ocs)
     print(f"Itens (puxados do pedido): {itens_pedido}")
-    transportadora = ctx.get("transportadora") or pedir_transportadora(ctx["pedido"])
+    transportadora = ctx.get("transportadora") or pedir_transportadora(ctx["pedido"], ctx)
     data_limite_iso = pedir_data_limite(ctx)
     ctx["data_embarque"] = data_limite_iso  # data do card da Logística (a régua usa a da OC quando há tabela)
     prazos = ctx.get("prazos") or {}
@@ -2127,7 +2601,9 @@ def enviar_trello(ctx, ocs):
 
     criados = []
     try:
-        descricao_log = f"Itens do Pedido: {itens_pedido}\nTransportadora: {transportadora}"
+        descricao_log = (f"Itens do Pedido: {itens_pedido}\n"
+                         + (f"ENTREGA: {RETIRADA_DEPOSITO.upper()} (o cliente retira; sem transportadora)"
+                            if transportadora == RETIRADA_DEPOSITO else f"Transportadora: {transportadora}"))
         if prazos.get("embarque"):
             br = lambda d: d.strftime("%d/%m/%Y")
             if prazos.get("embarque_atrasado"):
@@ -2341,7 +2817,14 @@ def gerar_descricao_html(numero_tray=None, itens_padrao="", personalizacao_padra
         numero_tray = input("Número do pedido da Tray (Enter para preencher tudo à mão): ").strip()
         if numero_tray and not itens_padrao:
             itens_padrao = itens_do_pedido_bling(numero_tray)
-    tipo = pedir_tipo()
+    tipo = None
+    if ctx is not None and tray():  # no fluxo de compras: PF/PJ pelo cadastro do cliente na Tray (CNPJ)
+        try:
+            tipo = "J" if destino_do_pedido(ctx).get("pessoa_juridica") else "F"
+            print(f"Cliente pessoa {'jurídica' if tipo == 'J' else 'física'} (cadastro da Tray).")
+        except Exception:
+            tipo = None
+    tipo = tipo or pedir_tipo()
     extras = {}
     if tipo == "J":
         extras["faturado"] = pedir("Pedido faturado (quantos dias?)")
@@ -2351,8 +2834,15 @@ def gerar_descricao_html(numero_tray=None, itens_padrao="", personalizacao_padra
         print(f"Data combinada: {dias} dias úteis (vale também para o card da Logística).")
     else:
         dias = pedir_dias_uteis()
-    itens = pedir_lista("Itens do pedido", itens_padrao)
-    personalizacao = pedir_lista("Personalização", personalizacao_padrao)
+    if ctx is not None and itens_padrao:  # no fluxo de compras os itens e a personalização já vêm prontos
+        itens = separar_lista(itens_padrao, False)
+        personalizacao = separar_lista(personalizacao_padrao, False) if personalizacao_padrao else []
+        print(f"Itens do pedido: {'; '.join(itens)}")
+        if personalizacao:
+            print(f"Personalização: {'; '.join(personalizacao)}")
+    else:
+        itens = pedir_lista("Itens do pedido", itens_padrao)
+        personalizacao = pedir_lista("Personalização", personalizacao_padrao)
     if tipo == "J":
         extras["pasta"] = pedir("Pasta")
         extras["info_nf"] = pedir("Informações adicionais de nota fiscal")
@@ -2382,11 +2872,6 @@ def gerar_descricao_html(numero_tray=None, itens_padrao="", personalizacao_padra
 # ---------------------------------------------------------------------------
 # RAMOS DO FLUXO
 # ---------------------------------------------------------------------------
-
-def resumo_personalizacoes(itens):
-    return "; ".join(f"{formatar_quantidade(i['quantidade'])}x {nome_da_loja(i)}: {i['personalizacao']}"
-                     for i in itens if i["personalizacao"])
-
 
 def texto_oc_tray(oc):
     """'OC 1234 Fornecedor Y - 2x Produto Z, 1x Produto W - Personalização: 2x Produto Z: logo'."""
@@ -2440,10 +2925,9 @@ def lista_ocs(ocs):
 
 
 def etapa_html(ctx, ocs):
-    """HTML do pedido ANTES do card da Logística: o prazo é perguntado aqui (Enter = data da Tray) e vale para o
-    card; o que for preenchido também entra na ficha do pedido. Sem HTML, o card pergunta o prazo como antes."""
-    if not sim("\nDeseja formalizar a observação em HTML?"):
-        return
+    """HTML do pedido ANTES do card da Logística, sempre (sem perguntar): o prazo vale para o card e o que for
+    preenchido também entra na ficha do pedido. A única confirmação depois é a do envio para o Trello."""
+    print("\n--- Observação em HTML (padrão) ---")
     pedido = ctx["pedido"]
     itens = texto_itens_logistica(pedido, ocs, "; ") if ocs else texto_itens(pedido.get("itens", []), "; ")
     gerar_descricao_html(ctx["numero_tray"], itens, ctx.get("personalizacao") or "", ocs_vinculadas=ocs, ctx=ctx)
@@ -2605,7 +3089,8 @@ def ramo_estoque(ctx):
     print("\n--- Produtos em estoque ---")
     itens = levantar_itens(ctx["pedido"], buscar_fornecedor=False)
     ctx["itens"] = itens
-    tem_personalizacao = perguntar_personalizacoes(itens, mostrar_origem=False)
+    linhas_pers = definir_personalizacoes(ctx, itens)
+    tem_personalizacao = bool(linhas_pers)
 
     # Status necessário, conferido ANTES de criar qualquer coisa
     if tem_personalizacao:
@@ -2621,8 +3106,8 @@ def ramo_estoque(ctx):
 
     ocs, email_enviado = [], False
     if tem_personalizacao:
-        ctx["personalizacao"] = resumo_personalizacoes(itens)
-        grupos = montar_plano(itens, comprar_produtos=False)
+        ctx["personalizacao"] = resumo_linhas_personalizacao(linhas_pers)
+        grupos = montar_plano(itens, comprar_produtos=False, linhas_pers=linhas_pers)
         ocs = criar_ocs_do_plano(ctx, grupos) if grupos else []
         if not ocs:
             print("\nNenhuma OC de personalização foi criada. Nada mais será feito.")
@@ -2653,10 +3138,10 @@ def ramo_compra(ctx):
         print("\nBuscando fornecedor e preço de cada item a comprar...")
     itens = levantar_itens(ctx["pedido"], comprar=comprar)  # fase 1
     ctx["itens"] = itens
-    perguntar_personalizacoes(itens)                    # fase 2
-    ctx["personalizacao"] = resumo_personalizacoes(itens)
+    linhas_pers = definir_personalizacoes(ctx, itens)   # fase 2: só se o pedido tiver produto de personalização
+    ctx["personalizacao"] = resumo_linhas_personalizacao(linhas_pers)
 
-    grupos = montar_plano(itens)                        # fase 3
+    grupos = montar_plano(itens, linhas_pers=linhas_pers)  # fase 3
     if not grupos:
         if any(comprar):
             print("\nNenhum item com fornecedor cadastrado e nenhuma personalização. Nada a comprar.")
@@ -2737,7 +3222,7 @@ def processar_pedido(numero_tray=None):
         print("Número do pedido é obrigatório.")
         return
 
-    id_pedido = buscar_id_pedido_tray(numero_tray)
+    id_pedido = buscar_id_pedido_tray(numero_tray) or id_pedido_por_vinculo(numero_tray)
     if id_pedido is None:
         print(f"Não encontrei no Bling nenhum pedido com o número da Tray {numero_tray}.")
         return
@@ -2746,6 +3231,7 @@ def processar_pedido(numero_tray=None):
     buscar_nomes_na_tray(numero_tray, pedido)  # nomes do Trello e das observações como o cliente comprou
     ctx = {"numero_tray": numero_tray, "id_pedido": id_pedido, "pedido": pedido,
            "ocs": [], "personalizacao": ""}
+    separar_personalizacoes(ctx)  # produtos de personalização da Tray: a chave do pedido personalizado
 
     opcao = escolher("Os produtos estão em estoque?", [("1", "Sim, tem em estoque (logística)"),
                                                        ("2", "Não, precisa comprar algum item (OC)"),

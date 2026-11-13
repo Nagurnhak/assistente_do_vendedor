@@ -111,7 +111,7 @@ def _salvar_tokens(resposta):
         "api_address": _api(),  # de qual loja é este token
     }
     # Grava num temporário e troca de uma vez (o refresh_token não se perde se o programa fechar).
-    temporario = ARQUIVO_TOKENS + ".tmp"
+    temporario = f"{ARQUIVO_TOKENS}.{os.getpid()}.tmp"  # um por processo (vários Assistentes abertos)
     with open(temporario, "w", encoding="utf-8") as f:
         json.dump(dados, f)
     os.replace(temporario, ARQUIVO_TOKENS)
@@ -200,26 +200,58 @@ LIMITE_POR_MINUTO = 170
 LIMITE_DIARIO = 9500
 ARQUIVO_USO = os.path.join(pasta_base(), "tray_uso.json")
 _janela = deque()
+_uso_cache = None
 
 
 def _uso_de_hoje():
+    global _uso_cache
     hoje = datetime.now().strftime("%Y-%m-%d")
-    try:
-        with open(ARQUIVO_USO, "r", encoding="utf-8") as f:
-            uso = json.load(f)
-    except (FileNotFoundError, ValueError):
-        uso = {}
-    return uso if uso.get("dia") == hoje else {"dia": hoje, "chamadas": 0}
+    uso = None
+    for tentativa in range(3):
+        try:
+            with open(ARQUIVO_USO, "r", encoding="utf-8") as f:
+                uso = json.load(f)
+            break
+        except FileNotFoundError:
+            uso = {}
+            break
+        except (OSError, ValueError):
+            # A nuvem ou outro Assistente podem estar substituindo o arquivo
+            # exatamente durante a leitura. Reabre e, se persistir, usa o
+            # contador desta execução em vez de derrubar a operação comercial.
+            time.sleep(0.15 * (tentativa + 1))
+    if uso is None:
+        uso = dict(_uso_cache or {})
+    atual = uso if uso.get("dia") == hoje else {"dia": hoje, "chamadas": 0}
+    _uso_cache = dict(atual)
+    return atual
 
 
 def _contar_chamada():
+    global _uso_cache
     uso = _uso_de_hoje()
     if uso["chamadas"] >= LIMITE_DIARIO:
         raise RuntimeError(f"Limite diário de {LIMITE_DIARIO} chamadas à Tray atingido; o app volta amanhã.")
     uso["chamadas"] += 1
-    with open(ARQUIVO_USO + ".tmp", "w", encoding="utf-8") as f:
-        json.dump(uso, f)
-    os.replace(ARQUIVO_USO + ".tmp", ARQUIVO_USO)
+    _uso_cache = dict(uso)
+    # Temporário próprio deste processo: dois Assistentes abertos (ou uma pasta na nuvem sincronizando) não podem
+    # disputar o mesmo arquivo. O contador é só controle: se não der para gravar agora, a chamada segue.
+    temporario = f"{ARQUIVO_USO}.{os.getpid()}.tmp"
+    try:
+        with open(temporario, "w", encoding="utf-8") as f:
+            json.dump(uso, f)
+        for tentativa in range(3):
+            try:
+                os.replace(temporario, ARQUIVO_USO)
+                return
+            except PermissionError:
+                time.sleep(0.2 * (tentativa + 1))
+    except OSError:
+        pass
+    try:
+        os.remove(temporario)
+    except OSError:
+        pass
 
 
 def _esperar_vez():

@@ -5,6 +5,8 @@ Envio das mensagens da régua pelo WhatsApp Web, num navegador próprio controla
 - Ritmo de uso normal: intervalo aleatório entre mensagens, limite por dia e só em horário comercial.
 - Modo teste (config.json -> whatsapp_envio.modo_teste): tudo vai para os números de teste, com a
   indicação de para quem iria. Nada é anotado como enviado ao fornecedor.
+  Exceção: as categorias em whatsapp_envio.envio_real ("logistica", "fabrica") vão de verdade mesmo
+  com o modo teste ligado; as demais ("fornecedores") seguem em teste.
 - Qualquer falha (sessão caiu, número sem WhatsApp, tela mudou) devolve a mensagem para o envio manual.
 
 Requer:  py -m pip install --user playwright  e  py -m playwright install chromium
@@ -39,6 +41,7 @@ TEXTOS_NUMERO_INVALIDO = ("inválido", "invalido", "invalid", "não está no wha
 PADRAO = {
     "modo_teste": True,
     "numeros_teste": [],
+    "envio_real": [],  # categorias que já vão de verdade no modo teste: "logistica", "fabrica", "fornecedores"
     "envio_automatico": False,
     "horario": "09:00",
     "horario_limite": "18:00",
@@ -115,14 +118,90 @@ class SessaoWhatsApp:
         time.sleep(random.uniform(1.5, 3.0))
         if not (caixa.inner_text() or "").strip():
             return False, "o texto não apareceu na conversa"
+        time.sleep(3)  # as mensagens antigas carregam depois da caixa: não podem parecer a mensagem nova
+        ja_na_tela = self.pagina.evaluate(IDS_DA_CONVERSA_JS)
         caixa.press("Enter")
-        limite = time.time() + 20
-        while time.time() < limite:  # a caixa esvazia quando a mensagem sai
-            if not (self.pagina.locator(SEL_CAIXA).last.inner_text() or "").strip():
-                time.sleep(2)
+        # A caixa esvazia na hora, com a mensagem ainda no relógio: fechar o navegador aí a faz falhar ("Ocorreu um
+        # erro", em 30/10). Só conta como enviada quando o próprio WhatsApp marcar Enviada/Entregue/Lida.
+        limite = time.time() + ESPERA_CONFIRMACAO_SEGUNDOS
+        while time.time() < limite:
+            estado = self.pagina.evaluate(ESTADO_DA_NOVA_JS, {"antes": ja_na_tela, "trecho": _trecho(texto)})
+            if estado == "confirmada":
+                time.sleep(2)  # dá tempo de o WhatsApp gravar o estado antes de o navegador fechar
                 return True, "enviada"
-            time.sleep(0.5)
-        return False, "não consegui confirmar o envio"
+            if estado == "erro":
+                return False, "o WhatsApp mostrou erro no envio"
+            time.sleep(1)
+        return False, "sem confirmação do WhatsApp em 2 minutos (mensagem no relógio)"
+
+
+ESPERA_CONFIRMACAO_SEGUNDOS = 120
+IDS_DA_CONVERSA_JS = "() => Array.from(document.querySelectorAll('#main [data-id]')).map(e => e.getAttribute('data-id'))"
+# Estado da mensagem nova (id que não estava na tela antes do Enter, com o começo do nosso texto):
+# 'erro', 'confirmada' (rótulo de enviada, os mesmos do LER_CONVERSA_JS) ou 'pendente'.
+ESTADO_DA_NOVA_JS = """({antes, trecho}) => {
+  const limpar = t => (t || '').replace(/\\s+/g, ' ').trim();
+  const rotulos = e => Array.from(e.querySelectorAll('[aria-label]')).map(a => a.getAttribute('aria-label').trim().toLowerCase());
+  const novas = Array.from(document.querySelectorAll('#main [data-id]'))
+    .filter(e => !antes.includes(e.getAttribute('data-id')) && limpar(e.innerText).includes(trecho));
+  if (novas.some(e => rotulos(e).some(r => r.startsWith('ocorreu um erro') || r.startsWith('an error occurred')))) return 'erro';
+  return novas.some(e => rotulos(e).some(r => /^(enviada|entregue|lida|sent|delivered|read)$/.test(r))) ? 'confirmada' : 'pendente';
+}"""
+
+
+def _trecho(texto):
+    """Começo da mensagem, com os espaços como o navegador mostra, para reconhecê-la na conversa."""
+    return " ".join(str(texto).split())[:40]
+
+
+LER_CONVERSA_JS = """() => Array.from(document.querySelectorAll('#main [data-id]'))
+  .filter(e => {  // recebida = sem 'Você:' e sem status de entrega (Enviada / Entregue / Lida), que só as nossas têm
+    const id = e.getAttribute('data-id') || '';
+    if (id.startsWith('true_')) return false;
+    if (id.startsWith('false_')) return true;
+    if (!e.querySelector('[data-pre-plain-text]')) return false;  // ainda não carregada na tela
+    const rotulos = Array.from(e.querySelectorAll('[aria-label]')).map(a => a.getAttribute('aria-label').trim().toLowerCase());
+    return !rotulos.some(r => /^(você|you):?$/.test(r) || /^(enviada|entregue|lida|pendente|sent|delivered|read|pending)$/.test(r));
+  })
+  .map(e => {
+    const c = e.querySelector('[data-pre-plain-text]');
+    const partes = Array.from(e.querySelectorAll('span.selectable-text')).map(s => s.innerText);
+    return {id: e.getAttribute('data-id'), pre: c ? c.getAttribute('data-pre-plain-text') : '',
+            texto: partes.length ? partes[partes.length - 1] : '', completo: e.innerText};
+  })"""
+
+
+def _quando(pre):
+    """'[14:05, 27/10/2026] Nome: ' -> '2026-10-27 14:05:00' (ou '' se não reconhecer)."""
+    import re
+    achado = re.search(r"\[(\d{1,2}):(\d{2}),\s*(\d{1,2})/(\d{1,2})/(\d{4})\]", pre or "")
+    if not achado:
+        return ""
+    h, mi, d, me, a = (int(x) for x in achado.groups())
+    return f"{a:04d}-{me:02d}-{d:02d} {h:02d}:{mi:02d}:00"
+
+
+def ler_respostas(numeros, aviso=print):
+    """Lê as mensagens recebidas nas conversas com esses números ({número: 'Logística'}). Só lê, não envia.
+    Devolve [{id, numero, quem, quando, texto, completo}]."""
+    lidas = []
+    with SessaoWhatsApp() as sessao:
+        if not sessao.esperar_login():
+            raise RuntimeError("WhatsApp desconectado (use 'Conectar WhatsApp')")
+        for numero, quem in numeros.items():
+            sessao.pagina.goto(f"{URL}/send?phone={numero}")
+            limite = time.time() + 60
+            while time.time() < limite and not sessao.pagina.locator(SEL_CAIXA).count():
+                time.sleep(1)
+            if not sessao.pagina.locator(SEL_CAIXA).count():
+                aviso(f"ATENÇÃO: a conversa com {quem} não abriu para ler as respostas.")
+                continue
+            time.sleep(4)  # as mensagens carregam depois da caixa de texto
+            for m in sessao.pagina.evaluate(LER_CONVERSA_JS):
+                lidas.append({"id": m["id"], "numero": numero, "quem": quem, "quando": _quando(m["pre"]),
+                              "texto": (m["texto"] or "").strip(), "completo": m["completo"] or ""})
+            time.sleep(random.uniform(2, 5))
+    return lidas
 
 
 def conectar(espera_segundos=180):
@@ -151,17 +230,42 @@ def _sobre(m):
     return f"da Logística (pedido {m.get('pedido')})" if m.get("tipo") == "logistica" else f"da OC {m['oc_numero']}"
 
 
-def enviar_lote(mensagens, ao_enviar=None, aviso=print):
+def categoria(m):
+    """'logistica', 'fabrica' ou 'fornecedores'."""
+    if m.get("tipo") == "logistica":
+        return "logistica"
+    return "fabrica" if m.get("fabrica") else "fornecedores"
+
+
+def e_teste(m, c=None):
+    """True se esta mensagem vai para os números de teste (e não para o destino real)."""
+    c = c or cfg()
+    if not c["modo_teste"]:
+        return False
+    if categoria(m) not in (c.get("envio_real") or []):
+        return True
+    # envio_real_desde: antes dessa data, e para embarques anteriores a ela (pendências antigas), segue em teste
+    desde = c.get("envio_real_desde") or ""
+    return bool(desde) and (date.today().isoformat() < desde or (m.get("embarque") or "9999") < desde)
+
+
+def enviar_lote(mensagens, ao_enviar=None, aviso=print, real=False):
     """Envia as mensagens do dia. ao_enviar(mensagem) é chamado a cada envio real (para anotar como enviada).
-    Devolve (enviadas, falhas), falhas = [(mensagem, motivo)] para irem ao envio manual."""
+    Devolve (enviadas, falhas), falhas = [(mensagem, motivo)] para irem ao envio manual.
+    real=True (envio pedido por um clique na tela): vai para o destino de verdade, sem modo teste."""
     c = cfg()
     if not em_horario_comercial():
         return [], [(m, "fora do horário comercial") for m in mensagens]
     enviadas, falhas = [], []
     testes = _testes_de_hoje() if c["modo_teste"] else None
     numeros_teste = [n for n in (c["numeros_teste"] or []) if n]
-    if c["modo_teste"] and not numeros_teste:
-        return [], [(m, "modo teste sem número de teste no config.json") for m in mensagens]
+    if real:
+        c = {**c, "modo_teste": False}
+    if not numeros_teste:
+        falhas = [(m, "modo teste sem número de teste no config.json") for m in mensagens if e_teste(m, c)]
+        mensagens = [m for m in mensagens if not e_teste(m, c)]
+        if not mensagens:
+            return [], falhas
     with SessaoWhatsApp() as sessao:
         if not sessao.esperar_login():
             return [], [(m, "WhatsApp desconectado (use 'Conectar WhatsApp')") for m in mensagens]
@@ -169,7 +273,8 @@ def enviar_lote(mensagens, ao_enviar=None, aviso=print):
             if len(enviadas) >= c["limite_diario"]:
                 falhas.append((m, "limite de mensagens do dia atingido"))
                 continue
-            if c["modo_teste"]:
+            teste = e_teste(m, c)
+            if teste:
                 chave = f"{m['oc_id']}:{m['chave']}"
                 if chave in testes["chaves"]:
                     continue
@@ -190,17 +295,17 @@ def enviar_lote(mensagens, ao_enviar=None, aviso=print):
                 try:  # histórico permanente de envios (aparece na tela Mensagens -> Histórico)
                     from ferramentas_internas import registrar_historico
                     registrar_historico({**m, "texto": texto}, "WhatsApp automático",
-                                        "teste" if c["modo_teste"] else "real", destino,
+                                        "teste" if teste else "real", destino,
                                         "enviada" if ok else "falhou", "" if ok else motivo)
                 except Exception as erro:
                     aviso(f"ATENÇÃO: não consegui gravar o histórico do envio ({erro}).")
             if all(ok for ok, _ in resultados):
                 enviadas.append(m)
-                if c["modo_teste"]:
+                if teste:
                     _anotar_teste(testes, chave)
                 elif ao_enviar:
                     ao_enviar(m)
-                aviso(f"WhatsApp: {'[teste] ' if c['modo_teste'] else ''}mensagem {_sobre(m)} enviada.")
+                aviso(f"WhatsApp: {'[teste] ' if teste else ''}mensagem {_sobre(m)} enviada.")
             else:
                 motivo = next(motivo for ok, motivo in resultados if not ok)
                 falhas.append((m, motivo))

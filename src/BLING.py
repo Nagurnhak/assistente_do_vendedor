@@ -87,7 +87,7 @@ def _salvar_tokens(resposta_token):
     }
     # Grava num temporário e troca de uma vez: se o programa fechar no meio,
     # o arquivo antigo continua inteiro (o refresh_token não se perde).
-    temporario = ARQUIVO_TOKENS + ".tmp"
+    temporario = f"{ARQUIVO_TOKENS}.{os.getpid()}.tmp"  # um por processo (vários Assistentes abertos)
     with open(temporario, "w", encoding="utf-8") as f:
         json.dump(dados, f)
     os.replace(temporario, ARQUIVO_TOKENS)

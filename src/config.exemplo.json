@@ -18,11 +18,30 @@
     "code": "SEU_CODE",
     "api_address": "URL_DA_API_DA_LOJA (ex.: https://www.sualoja.com.br/web_api)",
     "campo_observacao": "store_note",
+    "categoria_personalizados": "ID_DA_CATEGORIA_DOS_PRODUTOS_SOB_MEDIDA",
     "status_oc_enviada": "Aguardando fornecedor",
     "status_separacao": "Pedido em separação"
   },
   "compras": {
-    "status_tray": ["A Enviar", "Liberado"]
+    "status_tray": ["A Enviar", "Liberado"],
+    "produtos_personalizacao": {"CODIGO_DO_PRODUTO": "Tipo (ex.: Pintura)"}
+  },
+  "vendedores": [
+    {"id": "ID_DO_PARCEIRO_NA_TRAY", "nome": "Nome do vendedor"}
+  ],
+  "padrao_numero_pedido": "(?<!\\d)(1\\d{5})(?!\\d)",
+  "cadastro": {
+    "loja_tray_bling": "ID_DA_LOJA_TRAY_DENTRO_DO_BLING",
+    "fornecedores": {
+      "Nome do fornecedor": {
+        "contatos_bling": ["ID_DO_CONTATO_NO_BLING"],
+        "aba": "Nome da aba da tabela",
+        "desconto": 0.10,
+        "ipi": 0.05,
+        "frete": 0.05,
+        "margem": 2.0
+      }
+    }
   },
   "fabrica": {
     "nome": "Nome da fábrica no Bling",
@@ -48,6 +67,8 @@
   "whatsapp_envio": {
     "modo_teste": true,
     "numeros_teste": ["SEU_NUMERO_DE_TESTE"],
+    "envio_real": [],
+    "automatico_para": ["logistica", "fabrica"],
     "envio_automatico": false,
     "horario": "09:00",
     "horario_limite": "18:00",

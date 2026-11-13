@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Assistente do Vendedor</title>
-<meta name="description" content="Como o Assistente do Vendedor automatiza compras, prazos e acompanhamento entre Tray, Bling, Trello e WhatsApp.">
+<meta name="description" content="Como o Assistente do Vendedor centraliza vendas, compras e cadastro entre Tray, Bling, Trello e WhatsApp.">
 <style>
   :root {
     --fundo: #FBF7F3; --superficie: #FFFFFF; --superficie-2: #FFF1E6; --borda: #EADFD6;
@@ -118,23 +118,23 @@
   <div class="container">
     <div class="marca"><div class="logo">A</div><strong>Assistente do Vendedor</strong></div>
     <h1>Do pedido à entrega, sem retrabalho.</h1>
-    <p class="lead">Um aplicativo de desktop que liga a loja virtual (Tray), o ERP (Bling), o quadro de produção
-      (Trello) e o WhatsApp: calcula os prazos pelo frete real, emite as ordens de compra, abre os cards da fábrica
-      e da logística com fichas prontas e acompanha cada pedido até o embarque, perguntando ao vendedor só o que
-      exige decisão.</p>
+    <p class="lead">Um aplicativo de desktop com três módulos, Vendas, Compras e Cadastro, que liga a loja virtual
+      (Tray), o ERP (Bling), o quadro de produção (Trello) e o WhatsApp: lança o pedido na loja, emite as ordens de
+      compra, mostra o que está atrasado e corrige os valores pela tabela do fornecedor, perguntando só o que exige decisão.</p>
     <div class="selos">
-      <span class="selo">Python</span><span class="selo">customtkinter</span><span class="selo">Pillow</span>
+      <span class="selo">Python</span><span class="selo">customtkinter</span><span class="selo">Pillow</span><span class="selo">openpyxl</span>
       <span class="selo">Playwright</span><span class="selo">API Bling v3</span><span class="selo">API Trello</span>
       <span class="selo">API Tray</span><span class="selo">PyInstaller</span>
     </div>
     <div class="botoes">
       <a class="botao cheio" href="#testar">Testar a demonstração</a>
+      <a class="botao contorno" href="#modulos">Ver os módulos</a>
       <a class="botao contorno" href="#fluxo">Ver o fluxo</a>
       <a class="botao contorno" href="#cards">Ver os cards</a>
     </div>
     <p class="aviso">Projeto de portfólio: todos os dados aqui são fictícios. A demonstração simula as
       plataformas e não se conecta a nenhuma loja.</p>
-    <img class="print" src="exemplos/demo_1002.gif" alt="Demonstração: o pedido 1002 processado do começo ao fim, até os cards criados no Trello">
+    <img class="print" src="exemplos/demo_modulos.gif" alt="Demonstração: tela inicial, Lançar pedido, Conferência, Cadastro e Compras">
   </div>
 </header>
 
@@ -142,9 +142,54 @@
   <div class="container">
     <span class="rotulo">O resultado</span>
     <h2>Menos tempo em tarefa repetida</h2>
-    <div class="grade g2" style="margin-top:20px">
+    <div class="grade g3" style="margin-top:20px">
       <div class="cartao"><div class="numero">−80%</div><p>de tempo gasto com compras, medido em 1 semana de uso pelos vendedores.</p></div>
       <div class="cartao"><div class="numero">5 min → 30 s</div><p>por pedido, com a integração da Tray já implantada: 10 vezes mais rápido, como projetado.</p></div>
+      <div class="cartao"><div class="numero">+1.500</div><p>atualizações de custo e preço gravadas e registradas em histórico nos 3 primeiros dias do módulo Cadastro.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="modulos">
+  <div class="container">
+    <span class="rotulo">Os três módulos</span>
+    <h2>Vendas, Compras e Cadastro no mesmo lugar</h2>
+    <div class="grade g3" style="margin-top:20px">
+      <div class="cartao"><h3>💼 Vendas</h3><p class="suave">Lançar pedido, calculadora, conferência de pedidos e mensagens.</p></div>
+      <div class="cartao"><h3>🛒 Compras</h3><p class="suave">Do pedido da Tray às OCs no Bling e aos cards no Trello, com a descrição em HTML.</p></div>
+      <div class="cartao"><h3>🏷️ Cadastro</h3><p class="suave">Compara a tabela do fornecedor com o sistema e corrige os valores.</p></div>
+    </div>
+    <div class="grade g2" style="margin-top:32px">
+      <div>
+        <span class="tag">Vendas</span>
+        <h3 style="margin-top:10px">Lançar pedido</h3>
+        <p class="suave">Cadastra o pedido na Tray pela API: cliente por CPF/CNPJ ou nome, dados de cliente novo colados do
+          WhatsApp, produtos com variações e itens sob medida. Depois relê o pedido e confere a entrega.</p>
+        <a href="exemplos/tela_lancar_pedido.png"><img class="print" src="exemplos/tela_lancar_pedido.png" alt="Tela Lançar pedido"></a>
+      </div>
+      <div>
+        <span class="tag">Vendas</span>
+        <h3 style="margin-top:10px">Conferência</h3>
+        <p class="suave">Pedidos por vendedor, do mais urgente ao mais folgado. O filtro “Só atrasados” separa o que precisa de
+          ação: cobrar o fornecedor, salvar a nova previsão e avisar o cliente.</p>
+        <a href="exemplos/tela_conferencia.png"><img class="print" src="exemplos/tela_conferencia.png" alt="Tela Conferência com o filtro Só atrasados"></a>
+      </div>
+    </div>
+    <div class="grade g2" style="margin-top:32px">
+      <div>
+        <span class="tag">Cadastro</span>
+        <h3 style="margin-top:10px">Varredura de tabelas</h3>
+        <p class="suave">Lê a tabela do fornecedor, calcula compra, custo e venda e mostra o que está desatualizado no Bling e no site.
+          Aplica em massa o que foi marcado e confere depois de gravar.</p>
+        <a href="exemplos/tela_cadastro.png"><img class="print" src="exemplos/tela_cadastro.png" alt="Tela Cadastro com os itens desatualizados marcados"></a>
+      </div>
+      <div>
+        <span class="tag">Cadastro</span>
+        <h3 style="margin-top:10px">O que não consta no sistema</h3>
+        <p class="suave">Itens novos da tabela aparecem com custo e venda calculados, prontos para filtrar e exportar. Itens que saíram da
+          tabela podem ser inativados em massa, sem apagar nada.</p>
+        <a href="exemplos/tela_cadastro_novos.png"><img class="print" src="exemplos/tela_cadastro_novos.png" alt="Tela Cadastro no filtro Novos na tabela"></a>
+      </div>
     </div>
   </div>
 </section>
@@ -163,6 +208,7 @@
           <li>Digitar uma ordem de compra por fornecedor, copiando observações</li>
           <li>Abrir cards no Trello e colar prints do pedido e da OC</li>
           <li>Lembrar de cobrar fornecedores e logística perto do prazo</li>
+          <li>Comparar cada tabela nova de fornecedor com os preços do site, produto por produto</li>
         </ul>
       </div>
       <div class="cartao">
@@ -174,6 +220,7 @@
           <li>Uma OC por fornecedor, já com a data que ele precisa cumprir</li>
           <li>Cards com fichas em imagem, checklist de separação e data certa</li>
           <li>Lembretes do dia prontos para o WhatsApp</li>
+          <li>Varredura da tabela inteira, com correção em massa no Bling e na Tray</li>
         </ul>
       </div>
     </div>
@@ -221,7 +268,7 @@
       </div>
       <div class="cartao">
         <span class="tag">Trello · Fábrica</span>
-        <h3 style="margin-top:10px">OC 5003 (1002) - 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) - Personalização: pintura preta</h3>
+        <h3 style="margin-top:10px">OC 5003 (1002) - 1x Mesa de Jantar Aurora 1,60m (peça: Tampo Aurora 1,60m) - Personalização: 1x Mesa de Jantar Aurora 1,60m: Pintura: pintura preta</h3>
         <p class="suave">Data do card: quando a fábrica precisa entregar (embarque − 3 dias úteis de logística)</p>
         <a href="exemplos/ficha_OC_5003.png"><img class="print" style="margin-top:12px" src="exemplos/ficha_OC_5003.png" alt="Ficha da OC 5003 anexada ao card da fábrica"></a>
       </div>
@@ -280,7 +327,8 @@
       </div>
     </div>
     <p class="suave" style="margin-top:16px">Envio automático em horário comercial pelo WhatsApp Web, com limite diário, intervalo
-      entre mensagens, modo teste e histórico exportável para Excel. Cards parados há mais de 2 dias úteis sobem para o topo da lista.</p>
+      entre mensagens, modo teste e histórico exportável para Excel. As respostas são ligadas à OC ou ao pedido pela referência da mensagem,
+      e a nova data só entra depois do clique de quem confere. As listas ficam em ordem de data, com o mais atrasado no topo.</p>
   </div>
 </section>
 
@@ -304,15 +352,19 @@
     <span class="rotulo">Arquitetura</span>
     <h2>Módulos</h2>
     <div class="modulos" style="margin-top:20px">
-      <div class="modulo"><div class="arquivo">app.py</div><p>Janela: telas, cards de pedidos e o painel que transforma <code>print</code>/<code>input</code> do fluxo em perguntas.</p></div>
+      <div class="modulo"><div class="arquivo">app.py · interface.py</div><p>Janela: lateral dos módulos, abas, componentes comuns e o painel que transforma <code>print</code>/<code>input</code> do fluxo em perguntas.</p></div>
+      <div class="modulo"><div class="arquivo">telas_vendas · telas_compras · telas_cadastro</div><p>As telas de cada módulo, separadas da lógica.</p></div>
+      <div class="modulo"><div class="arquivo">lancar_pedido.py</div><p>Clientes, produtos e lançamento do pedido na Tray, com conferência depois de lançar.</p></div>
+      <div class="modulo"><div class="arquivo">conferencia.py</div><p>Pedidos por vendedor, situação das OCs, previsão e mensagens de cobrança.</p></div>
+      <div class="modulo"><div class="arquivo">cadastro.py</div><p>Leitura das tabelas, varredura, aplicação em massa, inativação e relatório em Excel.</p></div>
       <div class="modulo"><div class="arquivo">ferramentas_internas.py</div><p>Regras de negócio e fluxo de compras; também roda no terminal.</p></div>
       <div class="modulo"><div class="arquivo">BLING.py</div><p>OAuth2 do Bling, renovação automática de token, limite de requisições e novas tentativas.</p></div>
       <div class="modulo"><div class="arquivo">TRAY.py</div><p>Autenticação da Tray, limites de uso (por minuto e por dia), pedidos, observações e status.</p></div>
       <div class="modulo"><div class="arquivo">fichas.py</div><p>Desenha as fichas do pedido e da OC em PNG, no lugar dos prints manuais.</p></div>
       <div class="modulo"><div class="arquivo">prazos_frete.py</div><p>Converte as planilhas das transportadoras em um JSON leve e calcula o frete até o cliente.</p></div>
-      <div class="modulo"><div class="arquivo">WHATSAPP.py</div><p>Envio pelo WhatsApp Web com Playwright: horário comercial, limite diário e modo teste.</p></div>
-      <div class="modulo"><div class="arquivo">demo.py</div><p>Bling, Trello, Tray e WhatsApp simulados, com loja, clientes e fotos fictícios.</p></div>
-      <div class="modulo"><div class="arquivo">testes/</div><p>21 testes automáticos; os do fluxo rodam com a internet bloqueada.</p></div>
+      <div class="modulo"><div class="arquivo">WHATSAPP.py</div><p>Envio e leitura de respostas pelo WhatsApp Web com Playwright: horário comercial, limite diário e modo teste.</p></div>
+      <div class="modulo"><div class="arquivo">demo.py</div><p>Bling, Trello, Tray e WhatsApp simulados, com loja, clientes, tabelas e fotos fictícios.</p></div>
+      <div class="modulo"><div class="arquivo">testes/</div><p>47 testes automáticos; os da demonstração rodam com a internet bloqueada.</p></div>
       <div class="modulo"><div class="arquivo">notas_compras.py</div><p>Bloco gerenciado nas observações do pedido, preservando o resto do texto.</p></div>
     </div>
   </div>
@@ -325,6 +377,8 @@
     <div class="grade g2" style="margin-top:20px">
       <div class="cartao"><h3>Credenciais fora do código</h3><p class="suave">Chaves ficam num <code>config.json</code> local, ignorado pelo Git. O repositório só tem o modelo com campos vazios.</p></div>
       <div class="cartao"><h3>Segredos fora das mensagens</h3><p class="suave">Token do Trello no cabeçalho (não na URL); a Tray mascara chaves e tokens em qualquer erro.</p></div>
+      <div class="cartao"><h3>Condições comerciais fora do código</h3><p class="suave">Descontos, margens, vendedores e fornecedores reais ficam no <code>config.json</code>; no repositório só há exemplos fictícios.</p></div>
+      <div class="cartao"><h3>Ações em massa com freio</h3><p class="suave">A varredura começa com tudo desmarcado, pede confirmação, guarda os valores de antes e depois e nunca apaga produto.</p></div>
       <div class="cartao"><h3>Dados de trabalho no computador</h3><p class="suave">Pedidos acompanhados, mensagens, histórico e tabelas de frete ficam fora do Git; o WhatsApp começa em modo teste.</p></div>
       <div class="cartao"><h3>Demonstração isolada</h3><p class="suave">O executável de demonstração é gerado sem os módulos de Bling, Tray e WhatsApp: não tem como acessar uma loja real.</p></div>
     </div>
@@ -339,12 +393,13 @@
       <div class="cartao">
         <h3>Executável (Windows)</h3>
         <p class="suave">Baixe <code>Assistente_do_Vendedor_DEMO.exe</code> na aba <em>Releases</em> do repositório e abra.
-          Use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada, frete pela tabela) ou
-          <strong>1003</strong> (personalização). Ao terminar, a janela <em>Cards criados</em> mostra os cards como ficariam no Trello.</p>
+          Em Compras, use os pedidos <strong>1001</strong> (em estoque), <strong>1002</strong> (mesa estruturada e personalização) ou
+          <strong>1003</strong> (retirada no depósito). Em Vendas › Conferência, escolha <strong>Ana</strong> e marque “Só atrasados”.
+          Em Cadastro, clique em <strong>Fazer varredura</strong>: a tabela fictícia já vem escolhida.</p>
       </div>
       <div class="cartao">
         <h3>Pelo código</h3>
-        <p class="mono" style="margin-top:8px">py -m pip install customtkinter pillow requests<br>py src/app_demo.py<br>py -m unittest discover testes</p>
+        <p class="mono" style="margin-top:8px">py -m pip install customtkinter pillow requests openpyxl<br>py src/app_demo.py<br>py -m unittest discover testes</p>
       </div>
     </div>
   </div>
@@ -352,17 +407,18 @@
 
 <section>
   <div class="container">
-    <span class="rotulo">Próximos passos</span>
-    <h2>Em andamento</h2>
+    <span class="rotulo">Status</span>
+    <h2>Projeto concluído</h2>
+    <p class="suave">Vendas, Compras e Cadastro em uso diário na loja. Ideias que ficaram de fora desta versão:</p>
     <div class="grade g2" style="margin-top:20px">
+      <div class="cartao"><h3>Cadastro de novos em massa</h3><p class="suave">Cadastrar direto da tela os itens que a varredura encontrou em “Novos na tabela”.</p></div>
       <div class="cartao"><h3>Servidor central</h3><p class="suave">Levar o fluxo para um servidor, para funcionar com qualquer computador desligado e com acesso por perfil.</p></div>
-      <div class="cartao"><h3>Quadro de vendas</h3><p class="suave">Acompanhamento por vendedor, com alertas de prazo de entrega e de fornecedor atrasado.</p></div>
     </div>
   </div>
 </section>
 
 <footer>
-  <div class="container">Assistente do Vendedor · projeto de portfólio · dados fictícios · <a href="https://github.com/Nagurnhak/assistente_do_vendedor">código no GitHub</a></div>
+  <div class="container">Assistente do Vendedor · projeto concluído · portfólio com dados fictícios · <a href="https://github.com/Nagurnhak/assistente_do_vendedor">código no GitHub</a></div>
 </footer>
 
 </body>

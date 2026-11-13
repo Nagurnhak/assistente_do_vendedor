@@ -25,4 +25,9 @@ tray_uso.json
 diagnostico_*.txt
 whatsapp_sessao*/
 tabelas_frete/
+respostas_whatsapp.json
+cadastro_historico.jsonl
+cadastro_fornecedores.json
+varredura_*.xlsx
+backups_kits/
 NOTAS_LOCAIS.md

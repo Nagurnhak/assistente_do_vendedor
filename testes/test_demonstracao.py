@@ -54,14 +54,13 @@ class TestDemonstracao(unittest.TestCase):
     def test_compra_com_produto_estruturado_personalizacao_e_frete_pela_tabela(self):
         self.rodar(
             "1002", "2",                        # pedido 1002, precisa comprar
-            "", "",                             # transportadora do Bling; prazo = data da Tray
+            "",                                 # prazo = data da Tray
             "s", "s",                           # os dois itens precisam ser comprados
-            "n", "s", "pintura preta", "50", "n",  # personalização só no tampo (da fábrica)
+            "pintura preta", "1", "1", "50",    # o produto de personalização: na mesa, pela fábrica, R$ 50
             "", "", "", "", "s",                # OC Metalúrgica (base)
             "", "", "", "", "s",                # OC Estofados (cadeiras)
             "", "", "", "", "", "s",            # OC Fábrica (tampo + personalização)
             "s", "s",                           # OCs enviadas pelo Bling (a da fábrica vai pelo Trello)
-            "s", "F", "", "",                   # HTML: pessoa física, itens e personalização sugeridos
             "n", "1", "s",                      # card da fábrica: não urgente, aba 1, confirma
         )
         demo, fi = self.demo, self.fi
@@ -89,7 +88,7 @@ class TestDemonstracao(unittest.TestCase):
         self.assertEqual(demo.STATUS_TRAY["1002"], "Aguardando fornecedor")
 
     def test_tudo_em_estoque_vai_para_separacao(self):
-        self.rodar("1001", "1", "", "", "n", "n", "s")  # estoque, sem personalização, sem HTML, confirma
+        self.rodar("1001", "1", "", "s")  # estoque, prazo da Tray, confirma
         demo = self.demo
         self.assertEqual(demo.OCS, {})
         self.assertEqual(demo.PEDIDOS[10001]["situacao"]["id"], 101)  # Em separação
@@ -99,7 +98,7 @@ class TestDemonstracao(unittest.TestCase):
         self.assertEqual(card["anexos"], ["ficha_pedido_1001.png"])
 
     def test_pedido_inexistente_nao_cria_nada(self):
-        self.rodar("999")
+        self.rodar("999", "")  # não achou: Enter cancela o vínculo pelo ID da venda
         self.assertEqual((self.demo.OCS, self.novos_cards()), ({}, []))
 
     def test_pedidos_para_comprar_vem_da_tray(self):
@@ -112,8 +111,13 @@ class TestDemonstracao(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             resumo = fi.organizar_a_separar(aplicar=True)
         self.assertEqual(resumo["total"], 2)
-        self.assertEqual(len(resumo["parados"]), 1)  # o card que entrou na lista há 8 dias
+        self.assertEqual(len(resumo["atrasados"]), 1)  # o card com o embarque vencido
         hoje = _proximo_dia_util(date.today())
+        while not fi.e_dia_util(hoje):  # feriado também não tem lembrete
+            hoje = _proximo_dia_util(hoje + timedelta(days=1))
+        # datas fixadas a partir de um dia útil real, para o teste não depender do calendário de hoje
+        self.demo.CARDS[0]["due"] = f"{fi.somar_dias_uteis(hoje, 2).isoformat()}T12:00:00.000Z"
+        self.demo.CARDS[1]["due"] = f"{(hoje - timedelta(days=10)).isoformat()}T12:00:00.000Z"
         etapas = {m["pedido"]: m["etapa"] for m in fi.mensagens_logistica(hoje=hoje)}
         self.assertEqual(etapas, {"0998": "2", "0995": "atraso"})
 
